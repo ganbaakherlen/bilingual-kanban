@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bilingual Kanban & Team Cockpit</title>
+    <title>Bilingual Kanban & Google Auth Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
@@ -22,10 +22,35 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+    <!-- Login Overlay (Shown if not logged in) -->
+    <div id="loginScreen" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-slate-100 flex flex-col items-center text-center gap-6">
+            <div class="bg-indigo-600 text-white p-4 rounded-2xl shadow-lg">
+                <i class="fa-solid fa-kanban text-3xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-slate-900">Bilingual Kanban Hub</h2>
+                <p class="text-xs text-slate-500 mt-1">Google Workspace認証でログインしてください</p>
+            </div>
+
+            <div class="w-full flex flex-col gap-3">
+                <button onclick="simulateGoogleLogin('boss@e-st.co.jp')" class="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-2xl border border-slate-300 shadow-sm transition flex items-center justify-center gap-3">
+                    <i class="fa-brands fa-google text-red-500 text-base"></i> 👑 佐藤社長としてGoogleログイン (boss@e-st.co.jp)
+                </button>
+                <button onclick="simulateGoogleLogin('tanaka@e-st.co.jp')" class="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-2xl border border-slate-300 shadow-sm transition flex items-center justify-center gap-3">
+                    <i class="fa-brands fa-google text-blue-500 text-base"></i> 👤 田中スタッフとしてGoogleログイン (tanaka@e-st.co.jp)
+                </button>
+                <button onclick="simulateGoogleLogin('bator@e-st.co.jp')" class="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-2xl border border-slate-300 shadow-sm transition flex items-center justify-center gap-3">
+                    <i class="fa-brands fa-google text-emerald-500 text-base"></i> 👤 バトールスタッフとしてGoogleログイン (bator@e-st.co.jp)
+                </button>
+            </div>
+            <p class="text-[10px] text-slate-400">※管理者のGmailから招待されたアカウントのみアクセス可能です。</p>
+        </div>
+    </div>
 
     <!-- Header -->
     <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-40">
@@ -36,18 +61,17 @@
                 </div>
                 <div>
                     <h1 class="text-lg font-bold tracking-tight">Bilingual Kanban & Cockpit</h1>
-                    <p class="text-xs text-indigo-300">Google Workspace Integrated Team Hub</p>
+                    <p class="text-xs text-indigo-300">Google Workspace Integrated Hub</p>
                 </div>
             </div>
 
             <div class="flex items-center space-x-3">
-                <!-- User Role Switcher (Google Workspace Simulation) -->
-                <div class="bg-indigo-800/80 p-1.5 rounded-xl flex items-center space-x-2 border border-indigo-700">
-                    <span class="text-xs px-2 text-indigo-200 font-medium">Role:</span>
-                    <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-indigo-950 text-white text-xs py-1.5 px-3 rounded-lg border border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                        <option value="boss">👑 佐藤 社長 (Boss)</option>
-                        <option value="staff">👤 田中 スタッフ (Staff)</option>
-                    </select>
+                <!-- User Profile Display -->
+                <div class="bg-indigo-800/80 py-1.5 px-3 rounded-xl flex items-center space-x-2 border border-indigo-700 text-xs">
+                    <i class="fa-solid fa-user-circle text-indigo-300"></i>
+                    <span id="currentUserName" class="font-bold">佐藤 社長</span>
+                    <span id="currentUserBadge" class="bg-indigo-600 px-2 py-0.5 rounded text-[10px]">Boss</span>
+                    <button onclick="logout()" class="ml-2 text-indigo-300 hover:text-white" title="ログアウト"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
 
                 <!-- Notification Bell -->
@@ -56,7 +80,6 @@
                         <i class="fa-regular fa-bell text-lg"></i>
                         <span id="notifBadge" class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full hidden">0</span>
                     </button>
-                    <!-- Notification Dropdown -->
                     <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 py-2 z-50">
                         <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
                             <span class="font-bold text-xs uppercase tracking-wider text-slate-500">Google Chat Notifications</span>
@@ -74,7 +97,7 @@
     <!-- Main Container -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
         
-        <!-- Project & Header Stats Bar -->
+        <!-- Stats Bar -->
         <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="glass-panel p-4 rounded-2xl shadow-sm flex items-center justify-between">
                 <div>
@@ -111,24 +134,25 @@
             <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-200 pb-4">
                 <div>
                     <h2 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                        <i class="fa-solid fa-user-shield text-indigo-600"></i> 社長コックピット (Boss Dashboard)
+                        <i class="fa-solid fa-user-shield text-indigo-600"></i> 社長コックピット & メンバー招待管理
                     </h2>
-                    <p class="text-xs text-slate-500">スタッフの稼働状況の把握、個別メッセージ送信、プロジェクト管理を行います。</p>
+                    <p class="text-xs text-slate-500">スタッフの稼働状況把握、個別声掛け、およびGmail招待を行います。</p>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button onclick="openInviteModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2">
+                        <i class="fa-solid fa-user-plus"></i> Gmail招待を追加
+                    </button>
                     <button onclick="openProjectModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2">
-                        <i class="fa-solid fa-plus"></i> PJ管理・メンバー追加
+                        <i class="fa-solid fa-folder-plus"></i> PJ設定
                     </button>
                 </div>
             </div>
 
-            <!-- Staff Status Cards Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="bossStaffGrid">
-                <!-- Dynamically rendered staff summary -->
-            </div>
+            <!-- Staff Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="bossStaffGrid"></div>
         </section>
 
-        <!-- Long-Term Tasks Progress Area -->
+        <!-- Long-Term Tasks Area -->
         <section class="glass-panel p-5 rounded-3xl shadow-sm flex flex-col gap-3">
             <div class="flex justify-between items-center">
                 <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -136,20 +160,15 @@
                 </h3>
                 <span class="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium" id="longTermCount">0件進行中</span>
             </div>
-            <div id="longTermContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <!-- Populated dynamically -->
-            </div>
+            <div id="longTermContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
         </section>
 
-        <!-- Kanban Board Columns -->
+        <!-- Kanban Columns -->
         <section class="flex gap-4 overflow-x-auto pb-4 custom-scrollbar items-start min-h-[500px]">
             
-            <!-- Column: To Do -->
             <div class="kanban-col bg-slate-200/70 rounded-3xl p-4 flex flex-col gap-3 shadow-inner">
                 <div class="flex justify-between items-center px-1">
-                    <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full bg-slate-400"></span> 未着手 (To Do)
-                    </h3>
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-slate-400"></span> 未着手 (To Do)</h3>
                     <span id="count-todo" class="bg-white text-slate-600 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
                 <div id="col-todo" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'todo')"></div>
@@ -158,34 +177,25 @@
                 </button>
             </div>
 
-            <!-- Column: In Progress -->
             <div class="kanban-col bg-blue-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-blue-100/50">
                 <div class="flex justify-between items-center px-1">
-                    <h3 class="font-bold text-xs uppercase tracking-wider text-blue-800 flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full bg-blue-500"></span> 進行中 (In Progress)
-                    </h3>
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-blue-800 flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-500"></span> 進行中 (In Progress)</h3>
                     <span id="count-inprogress" class="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
                 <div id="col-inprogress" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'inprogress')"></div>
             </div>
 
-            <!-- Column: SOS / Hold -->
             <div class="kanban-col bg-rose-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-rose-100/50">
                 <div class="flex justify-between items-center px-1">
-                    <h3 class="font-bold text-xs uppercase tracking-wider text-rose-800 flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span> 保留・SOS (SOS)
-                    </h3>
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-rose-800 flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span> 保留・SOS (SOS)</h3>
                     <span id="count-sos" class="bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
                 <div id="col-sos" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'sos')"></div>
             </div>
 
-            <!-- Column: Done -->
             <div class="kanban-col bg-emerald-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-emerald-100/50">
                 <div class="flex justify-between items-center px-1">
-                    <h3 class="font-bold text-xs uppercase tracking-wider text-emerald-800 flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span> 完了 (Done)
-                    </h3>
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-emerald-800 flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> 完了 (Done)</h3>
                     <span id="count-done" class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
                 <div id="col-done" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'done')"></div>
@@ -194,150 +204,183 @@
         </section>
     </main>
 
-    <!-- Modal: Add/Edit Task -->
+    <!-- Modal: Gmail Invitation -->
+    <div id="inviteModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">スタッフのGmail招待</h3>
+                <button onclick="closeInviteModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="flex flex-col gap-3 text-xs">
+                <p class="text-slate-500">招待したいスタッフのGmailアドレスを入力してください。登録されたアドレスはGoogleログイン可能になります。</p>
+                <div>
+                    <label class="block font-bold text-slate-600 mb-1">スタッフ名</label>
+                    <input type="text" id="inviteName" placeholder="例: スフバートル" class="w-full p-3 rounded-xl border border-slate-200">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-600 mb-1">Gmailアドレス</label>
+                    <input type="email" id="inviteEmail" placeholder="example@gmail.com" class="w-full p-3 rounded-xl border border-slate-200">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-600 mb-1">権限選択</label>
+                    <select id="inviteRole" class="w-full p-3 rounded-xl border border-slate-200">
+                        <option value="staff">スタッフ (Staff)</option>
+                        <option value="boss">社長・管理者 (Boss)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeInviteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl">キャンセル</button>
+                    <button type="button" onclick="sendInvitation()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow">招待を送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Task -->
     <div id="taskModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="font-bold text-slate-800 text-base" id="taskModalTitle">新規タスクの作成</h3>
+                <h3 class="font-bold text-slate-800 text-base" id="taskModalTitle">タスクの作成</h3>
                 <button onclick="closeTaskModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            <form id="taskForm" onsubmit="saveTask(event)" class="flex flex-col gap-4">
+            <form id="taskForm" onsubmit="saveTask(event)" class="flex flex-col gap-4 text-xs">
                 <input type="hidden" id="taskId">
                 <input type="hidden" id="taskStatus" value="todo">
-                
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">タスク名 (日本語 / Монгол)</label>
-                    <input type="text" id="taskTitleInput" required placeholder="例: 応募者データのスプレッドシート整理" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <label class="block font-bold text-slate-600 mb-1">タスク名</label>
+                    <input type="text" id="taskTitleInput" required class="w-full p-3 rounded-xl border border-slate-200">
                 </div>
-
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">担当スタッフ</label>
-                    <select id="taskAssignee" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <label class="block font-bold text-slate-600 mb-1">担当スタッフ</label>
+                    <select id="taskAssignee" class="w-full p-3 rounded-xl border border-slate-200">
                         <option value="田中 スタッフ">田中 スタッフ</option>
                         <option value="バトール スタッフ">バトール スタッフ</option>
-                        <option value="ノミン スタッフ">ノミン スタッフ</option>
                     </select>
                 </div>
-
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-slate-600 mb-1">優先度</label>
-                        <select id="taskPriority" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="通常">🟢 通常 (Normal)</option>
-                            <option value="重要">🟡 重要 (Important)</option>
-                            <option value="緊急">🔴 緊急 (Urgent)</option>
+                        <label class="block font-bold text-slate-600 mb-1">優先度</label>
+                        <select id="taskPriority" class="w-full p-3 rounded-xl border border-slate-200">
+                            <option value="通常">🟢 通常</option>
+                            <option value="重要">🟡 重要</option>
+                            <option value="緊急">🔴 緊急</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-600 mb-1">期限</label>
-                        <input type="date" id="taskDueDate" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <label class="block font-bold text-slate-600 mb-1">期限</label>
+                        <input type="date" id="taskDueDate" class="w-full p-3 rounded-xl border border-slate-200">
                     </div>
                 </div>
-
-                <div class="flex items-center gap-2 pt-2">
-                    <input type="checkbox" id="isLongTerm" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
-                    <label for="isLongTerm" class="text-xs font-bold text-slate-700 cursor-pointer">長期・継続タスクとしてプログレスバー表示にする</label>
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="isLongTerm" class="w-4 h-4 text-indigo-600 rounded">
+                    <label for="isLongTerm" class="font-bold text-slate-700">長期・継続タスクにする</label>
                 </div>
-
-                <div class="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition">キャンセル</button>
-                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition">保存する</button>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl">キャンセル</button>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow">保存する</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Modal: Boss Encouragement & Directive Editor -->
+    <!-- Modal: Boss Message -->
     <div id="bossMsgModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4 text-xs">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="font-bold text-slate-800 text-base" id="bossMsgModalTitle">スタッフへ声掛け・指示送信</h3>
+                <h3 class="font-bold text-slate-800 text-base" id="bossMsgModalTitle">声掛け・指示送信</h3>
                 <button onclick="closeBossMsgModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            <div class="flex flex-col gap-3">
-                <p class="text-xs text-slate-500">佐藤社長のアカウントからGoogle Chatおよび通知センターへ直接メッセージを送信します。</p>
-                <input type="hidden" id="targetStaffName">
-                
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" onclick="setPresetMsg('進捗はどう？困ったことあれば言ってね！')" class="text-[11px] bg-indigo-50 text-indigo-700 px-2.5 py-1.5 rounded-lg border border-indigo-100 hover:bg-indigo-100">進捗確認の声掛け</button>
-                    <button type="button" onclick="setPresetMsg('このタスクを最優先で進めてください。')" class="text-[11px] bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-lg border border-amber-100 hover:bg-amber-100">優先度指示</button>
-                    <button type="button" onclick="setPresetMsg('SOS対応お疲れ様！一緒に解決しよう。')" class="text-[11px] bg-rose-50 text-rose-700 px-2.5 py-1.5 rounded-lg border border-rose-100 hover:bg-rose-100">SOSフォロー</button>
-                </div>
-
-                <div>
-                    <textarea id="bossMsgContent" rows="4" placeholder="メッセージを入力してください..." class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-                </div>
-
-                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                    <button type="button" onclick="closeBossMsgModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition">キャンセル</button>
-                    <button type="button" onclick="sendBossMessage()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5">
-                        <i class="fa-brands fa-google text-xs"></i> Google Chatへ送信
-                    </button>
-                </div>
+            <input type="hidden" id="targetStaffName">
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="setPresetMsg('進捗いかがですか？')" class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg">進捗確認</button>
+                <button type="button" onclick="setPresetMsg('最優先で対応お願いします。')" class="bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">優先度指示</button>
+            </div>
+            <textarea id="bossMsgContent" rows="4" placeholder="メッセージを入力..." class="w-full p-3 rounded-xl border border-slate-200"></textarea>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onclick="closeBossMsgModal()" class="px-4 py-2 bg-slate-100 font-bold rounded-xl">キャンセル</button>
+                <button onclick="sendBossMessage()" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow flex items-center gap-1.5"><i class="fa-brands fa-google"></i> Google Chatへ送信</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal: Project Management & Member Add -->
-    <div id="projectModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="font-bold text-slate-800 text-base">プロジェクト管理 ＆ メンバー追加</h3>
-                <button onclick="closeProjectModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <div class="flex flex-col gap-4 text-xs">
-                <div>
-                    <label class="block font-bold text-slate-600 mb-1">プロジェクト名</label>
-                    <input type="text" id="modalProjName" value="E-st 総合製造人材派遣PJ" class="w-full p-3 rounded-xl border border-slate-200">
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-600 mb-1">参加スタッフの割り当て</label>
-                    <div class="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> 田中 スタッフ (Tanaka)</label>
-                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> バトール スタッフ (Bator)</label>
-                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> ノミン スタッフ (Nomin)</label>
-                    </div>
-                </div>
-                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                    <button type="button" onclick="closeProjectModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl">閉じる</button>
-                    <button type="button" onclick="saveProjectSettings()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow">設定を保存</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- JavaScript Application Logic -->
+    <!-- App Logic Script -->
     <script>
-        // Initial Mock Data
+        let currentUser = JSON.parse(localStorage.getItem('bilingual_kanban_user')) || null;
+        
         let tasks = JSON.parse(localStorage.getItem('bilingual_kanban_tasks')) || [
             { id: 1, title: '求人広告バナーのデザイン調整 (E-st)', assignee: '田中 スタッフ', status: 'inprogress', priority: '緊急', dueDate: '2026-10-15', isLongTerm: false },
             { id: 2, title: 'モンゴル人実習生の受入書類作成', assignee: 'バトール スタッフ', status: 'todo', priority: '重要', dueDate: '2026-10-20', isLongTerm: false },
-            { id: 3, title: 'コールセンター稼働マスタのVBA修正', assignee: 'ノミン スタッフ', status: 'sos', priority: '緊急', dueDate: '2026-10-12', isLongTerm: false },
-            { id: 4, title: '【長期】SNS応募者フォローアップ体制の構築', assignee: '田中 スタッフ', status: 'inprogress', priority: '通常', dueDate: '2026-10-31', isLongTerm: true, progress: 65 }
+            { id: 3, title: '【長期】SNS応募者フォローアップ体制', assignee: '田中 スタッフ', status: 'inprogress', priority: '通常', dueDate: '2026-10-31', isLongTerm: true, progress: 65 }
         ];
 
         let notifications = JSON.parse(localStorage.getItem('bilingual_kanban_notifs')) || [
-            { id: 1, text: '【佐藤社長より】バナー作成よろしく頼むね！', time: '10分前', unread: true, taskId: 1 },
-            { id: 2, text: '【SOS発信】ノミン スタッフからVBAエラーのヘルプ要請', time: '1時間前', unread: true, taskId: 3 }
+            { id: 1, text: '【佐藤社長より】バナー作成よろしく頼むね！', time: '10分前', unread: true }
         ];
 
-        let currentUserRole = 'boss'; // 'boss' or 'staff'
+        let invitedUsers = JSON.parse(localStorage.getItem('bilingual_kanban_invites')) || [
+            { name: '佐藤 社長', email: 'boss@e-st.co.jp', role: 'boss' },
+            { name: '田中 スタッフ', email: 'tanaka@e-st.co.jp', role: 'staff' },
+            { name: 'バトール スタッフ', email: 'bator@e-st.co.jp', role: 'staff' }
+        ];
 
         function initApp() {
+            if (!currentUser) {
+                document.getElementById('loginScreen').classList.remove('hidden');
+            } else {
+                document.getElementById('loginScreen').classList.add('hidden');
+                applyUserSession();
+            }
             renderKanban();
             renderBossCockpit();
             renderNotifications();
             updateStats();
         }
 
-        function switchUserRole(role) {
-            currentUserRole = role;
+        function simulateGoogleLogin(email) {
+            const user = invitedUsers.find(u => u.email === email);
+            if (user) {
+                currentUser = user;
+                localStorage.setItem('bilingual_kanban_user', JSON.stringify(currentUser));
+                document.getElementById('loginScreen').classList.add('hidden');
+                applyUserSession();
+                initApp();
+            } else {
+                alert('このGmailアドレスは招待されていません。');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('bilingual_kanban_user');
+            currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+
+        function applyUserSession() {
+            if (!currentUser) return;
+            document.getElementById('currentUserName').innerText = currentUser.name;
+            const badge = document.getElementById('currentUserBadge');
+            badge.innerText = currentUser.role === 'boss' ? 'Boss' : 'Staff';
+
             const cockpit = document.getElementById('bossCockpit');
-            if (role === 'boss') {
+            if (currentUser.role === 'boss') {
                 cockpit.classList.remove('hidden');
             } else {
                 cockpit.classList.add('hidden');
             }
+        }
+
+        function openInviteModal() { document.getElementById('inviteModal').classList.remove('hidden'); }
+        function closeInviteModal() { document.getElementById('inviteModal').classList.add('hidden'); }
+        function sendInvitation() {
+            const name = document.getElementById('inviteName').value;
+            const email = document.getElementById('inviteEmail').value;
+            const role = document.getElementById('inviteRole').value;
+            if (!name || !email) { alert('項目をすべて入力してください'); return; }
+
+            invitedUsers.push({ name, email, role });
+            localStorage.setItem('bilingual_kanban_invites', JSON.stringify(invitedUsers));
+            closeInviteModal();
+            alert(`[Gmail招待完了]\n${email} (${name}) を権限「${role}」で招待リストに追加しました。これで該当Googleアカウントでログイン可能です。`);
         }
 
         function updateStats() {
@@ -349,25 +392,18 @@
             document.getElementById('sosStats').innerText = `${sos}件`;
 
             ['todo', 'inprogress', 'sos', 'done'].forEach(status => {
-                const count = tasks.filter(t => t.status === status).length;
-                document.getElementById(`count-${status}`).innerText = count;
+                document.getElementById(`count-${status}`).innerText = tasks.filter(t => t.status === status).length;
             });
 
             const longTermTasks = tasks.filter(t => t.isLongTerm);
             document.getElementById('longTermCount').innerText = `${longTermTasks.length}件進行中`;
             
-            const ltContainer = document.getElementById('longTermContainer');
-            ltContainer.innerHTML = longTermTasks.map(t => `
-                <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100 flex flex-col gap-2">
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="font-bold text-indigo-900 truncate">${t.title}</span>
-                        <span class="text-slate-500">${t.assignee}</span>
-                    </div>
-                    <div class="w-full bg-slate-200 rounded-full h-2">
-                        <div class="bg-indigo-600 h-2 rounded-full" style="width: ${t.progress || 50}%"></div>
-                    </div>
+            document.getElementById('longTermContainer').innerHTML = longTermTasks.map(t => `
+                <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100 flex flex-col gap-2 text-xs">
+                    <div class="flex justify-between items-center"><span class="font-bold text-indigo-900">${t.title}</span><span class="text-slate-500">${t.assignee}</span></div>
+                    <div class="w-full bg-slate-200 rounded-full h-2"><div class="bg-indigo-600 h-2 rounded-full" style="width: ${t.progress || 50}%"></div></div>
                 </div>
-            `).join('') || '<div class="col-span-3 text-center text-xs text-slate-400 py-2">現在進行中の長期タスクはありません</div>';
+            `).join('') || '<div class="col-span-3 text-center text-xs text-slate-400 py-2">長期タスクはありません</div>';
 
             localStorage.setItem('bilingual_kanban_tasks', JSON.stringify(tasks));
             localStorage.setItem('bilingual_kanban_notifs', JSON.stringify(notifications));
@@ -380,17 +416,17 @@
 
                 container.innerHTML = filtered.map(t => `
                     <div draggable="true" ondragstart="drag(event, ${t.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 cursor-grab hover:shadow-md transition">
-                        <div class="flex justify-between items-start gap-2">
+                        <div class="flex justify-between items-start">
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${getPriorityBadge(t.priority)}">${t.priority}</span>
                             <div class="flex items-center gap-1">
                                 <button onclick="editTask(${t.id})" class="text-slate-400 hover:text-indigo-600 p-1"><i class="fa-solid fa-pen text-xs"></i></button>
                                 <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash text-xs"></i></button>
                             </div>
                         </div>
-                        <h4 class="text-xs font-bold text-slate-800 leading-relaxed">${t.title}</h4>
+                        <h4 class="text-xs font-bold text-slate-800">${t.title}</h4>
                         <div class="flex justify-between items-center pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-user"></i> ${t.assignee}</span>
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-calendar"></i> ${t.dueDate || '未設定'}</span>
+                            <span><i class="fa-regular fa-user"></i> ${t.assignee}</span>
+                            <span><i class="fa-regular fa-calendar"></i> ${t.dueDate || '未設定'}</span>
                         </div>
                     </div>
                 `).join('') || `<div class="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">タスクなし</div>`;
@@ -398,80 +434,50 @@
             updateStats();
         }
 
-        function getPriorityBadge(priority) {
-            if (priority === '緊急') return 'bg-rose-100 text-rose-700';
-            if (priority === '重要') return 'bg-amber-100 text-amber-700';
+        function getPriorityBadge(p) {
+            if (p === '緊急') return 'bg-rose-100 text-rose-700';
+            if (p === '重要') return 'bg-amber-100 text-amber-700';
             return 'bg-emerald-100 text-emerald-700';
         }
 
         function renderBossCockpit() {
             const grid = document.getElementById('bossStaffGrid');
-            const staffList = [
-                { name: '田中 スタッフ', role: 'デザイナー・営業', tasksCount: tasks.filter(t => t.assignee === '田中 スタッフ' && t.status !== 'done').length },
-                { name: 'バトール スタッフ', role: '人材調整・労務', tasksCount: tasks.filter(t => t.assignee === 'バトール スタッフ' && t.status !== 'done').length },
-                { name: 'ノミン スタッフ', role: 'データ管理・BPO', tasksCount: tasks.filter(t => t.assignee === 'ノミン スタッフ' && t.status !== 'done').length }
-            ];
+            const staffList = invitedUsers.filter(u => u.role === 'staff');
 
-            grid.innerHTML = staffList.map(s => `
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h4 class="font-bold text-sm text-slate-800">${s.name}</h4>
-                            <p class="text-[11px] text-slate-500">${s.role}</p>
+            grid.innerHTML = staffList.map(s => {
+                const count = tasks.filter(t => t.assignee === s.name && t.status !== 'done').length;
+                return `
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 text-xs">
+                        <div class="flex justify-between items-start">
+                            <div><h4 class="font-bold text-slate-800">${s.name}</h4><p class="text-[11px] text-slate-500">${s.email}</p></div>
+                            <span class="bg-indigo-50 text-indigo-700 font-bold px-2.5 py-1 rounded-xl">未了 ${count}件</span>
                         </div>
-                        <span class="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-xl">未了 ${s.tasksCount}件</span>
-                    </div>
-                    <div class="flex gap-2 pt-2 border-t border-slate-100">
-                        <button onclick="openBossMsgModal('${s.name}')" class="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5">
-                            <i class="fa-regular fa-comment-dots"></i> 声掛け・指示
+                        <button onclick="openBossMsgModal('${s.name}')" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+                            <i class="fa-regular fa-comment-dots"></i> 声掛け・指示送信
                         </button>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
-        // Drag & Drop
         let draggedId = null;
-        function drag(ev, id) { draggedId = id; }
-        function allowDrop(ev) { ev.preventDefault(); }
-        function drop(ev, newStatus) {
-            ev.preventDefault();
-            const task = tasks.find(t => t.id === draggedId);
-            if (task) {
-                task.status = newStatus;
-                renderKanban();
-                renderBossCockpit();
-            }
+        function drag(e, id) { draggedId = id; }
+        function allowDrop(e) { e.preventDefault(); }
+        function drop(e, status) {
+            e.preventDefault();
+            const t = tasks.find(x => x.id === draggedId);
+            if (t) { t.status = status; renderKanban(); renderBossCockpit(); }
         }
 
-        // Task Modal
         function openTaskModal(status) {
             document.getElementById('taskId').value = '';
             document.getElementById('taskStatus').value = status;
             document.getElementById('taskTitleInput').value = '';
-            document.getElementById('isLongTerm').checked = false;
-            document.getElementById('taskModalTitle').innerText = '新規タスクの作成';
             document.getElementById('taskModal').classList.remove('hidden');
         }
         function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
-
-        function editTask(id) {
-            const t = tasks.find(x => x.id === id);
-            if (!t) return;
-            document.getElementById('taskId').value = t.id;
-            document.getElementById('taskStatus').value = t.status;
-            document.getElementById('taskTitleInput').value = t.title;
-            document.getElementById('taskAssignee').value = t.assignee;
-            document.getElementById('taskPriority').value = t.priority;
-            document.getElementById('taskDueDate').value = t.dueDate || '';
-            document.getElementById('isLongTerm').checked = t.isLongTerm || false;
-            document.getElementById('taskModalTitle').innerText = 'タスクの編集';
-            document.getElementById('taskModal').classList.remove('hidden');
-        }
-
         function saveTask(e) {
             e.preventDefault();
-            const id = document.getElementById('taskId').value;
             const title = document.getElementById('taskTitleInput').value;
             const assignee = document.getElementById('taskAssignee').value;
             const priority = document.getElementById('taskPriority').value;
@@ -479,97 +485,47 @@
             const isLongTerm = document.getElementById('isLongTerm').checked;
             const status = document.getElementById('taskStatus').value;
 
-            if (id) {
-                const t = tasks.find(x => x.id == id);
-                if (t) {
-                    t.title = title; t.assignee = assignee; t.priority = priority; t.dueDate = dueDate; t.isLongTerm = isLongTerm;
-                }
-            } else {
-                const newTask = { id: Date.now(), title, assignee, status, priority, dueDate, isLongTerm, progress: isLongTerm ? 30 : 0 };
-                tasks.push(newTask);
-            }
-
+            tasks.push({ id: Date.now(), title, assignee, status, priority, dueDate, isLongTerm, progress: isLongTerm ? 30 : 0 });
             closeTaskModal();
             renderKanban();
             renderBossCockpit();
         }
-
         function deleteTask(id) {
-            if (confirm('このタスクを削除しますか？')) {
-                tasks = tasks.filter(t => t.id !== id);
-                renderKanban();
-                renderBossCockpit();
-            }
+            if (confirm('削除しますか？')) { tasks = tasks.filter(t => t.id !== id); renderKanban(); renderBossCockpit(); }
         }
 
-        // Boss Message Modal
-        function openBossMsgModal(staffName) {
-            document.getElementById('targetStaffName').value = staffName;
-            document.getElementById('bossMsgModalTitle').innerText = `${staffName} へ声掛け・指示送信`;
+        function openBossMsgModal(name) {
+            document.getElementById('targetStaffName').value = name;
+            document.getElementById('bossMsgModalTitle').innerText = `${name}へメッセージ送信`;
             document.getElementById('bossMsgContent').value = '';
             document.getElementById('bossMsgModal').classList.remove('hidden');
         }
         function closeBossMsgModal() { document.getElementById('bossMsgModal').classList.add('hidden'); }
-        function setPresetMsg(text) { document.getElementById('bossMsgContent').value = text; }
-
+        function setPresetMsg(t) { document.getElementById('bossMsgContent').value = t; }
         function sendBossMessage() {
-            const staff = document.getElementById('targetStaffName').value;
+            const name = document.getElementById('targetStaffName').value;
             const text = document.getElementById('bossMsgContent').value;
-            if (!text) { alert('メッセージを入力してください'); return; }
-
-            notifications.unshift({
-                id: Date.now(),
-                text: `【佐藤社長 ⇒ ${staff}】${text}`,
-                time: 'たった今',
-                unread: true
-            });
-
+            if (!text) return;
+            notifications.unshift({ id: Date.now(), text: `【佐藤社長 ⇒ ${name}】${text}`, time: 'たった今', unread: true });
             closeBossMsgModal();
             renderNotifications();
-            alert(`[Google Chat Webhook自動送信成功]\n佐藤社長のアカウントから ${staff} へメッセージを送信し、Google Chatへディープリンク付き通知をdispatchしました。`);
+            alert(`[Google Chat自動送信]\n${name}へメッセージが飛びました。`);
         }
 
-        // Project Modal
-        function openProjectModal() { document.getElementById('projectModal').classList.remove('hidden'); }
-        function closeProjectModal() { document.getElementById('projectModal').classList.add('hidden'); }
-        function saveProjectSettings() {
-            const name = document.getElementById('modalProjName').value;
-            document.getElementById('currentProjName').innerText = name;
-            closeProjectModal();
-            alert('プロジェクト設定と参加メンバーが正常に更新されました。');
-        }
-
-        // Notifications
-        function toggleNotifications() {
-            const dropdown = document.getElementById('notifDropdown');
-            dropdown.classList.toggle('hidden');
-        }
+        function toggleNotifications() { document.getElementById('notifDropdown').classList.toggle('hidden'); }
         function renderNotifications() {
             const list = document.getElementById('notifList');
-            const unreadCount = notifications.filter(n => n.unread).length;
+            const unread = notifications.filter(n => n.unread).length;
             const badge = document.getElementById('notifBadge');
-
-            if (unreadCount > 0) {
-                badge.innerText = unreadCount;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-
+            if (unread > 0) { badge.innerText = unread; badge.classList.remove('hidden'); } else { badge.classList.add('hidden'); }
             list.innerHTML = notifications.map(n => `
-                <div class="p-3 hover:bg-slate-50 transition flex flex-col gap-1">
+                <div class="p-3 hover:bg-slate-50 flex flex-col gap-1">
                     <p class="font-medium text-slate-800">${n.text}</p>
-                    <div class="flex justify-between items-center text-[10px] text-slate-400">
-                        <span>${n.time}</span>
-                        <a href="#" onclick="alert('Google Chatディープリンクから該当タスクを開きます')" class="text-indigo-600 hover:underline">タスクを開く ➔</a>
-                    </div>
+                    <div class="flex justify-between items-center text-[10px] text-slate-400"><span>${n.time}</span><a href="#" class="text-indigo-600 hover:underline">タスクを開く ➔</a></div>
                 </div>
-            `).join('') || '<div class="p-4 text-center text-slate-400">通知はありません</div>';
+            `).join('') || '<div class="p-4 text-center text-slate-400">通知なし</div>';
         }
-        function clearNotifications() {
-            notifications.forEach(n => n.unread = false);
-            renderNotifications();
-        }
+        function clearNotifications() { notifications.forEach(n => n.unread = false); renderNotifications(); }
 
         window.onload = initApp;
     </script>
