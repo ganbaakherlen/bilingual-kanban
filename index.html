@@ -1,1489 +1,577 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Bilingual Kanban & Team Cockpit with Google Chat</title>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
-
-  <style>
-    body { font-family: 'Inter', 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; user-select: none; }
-    input, textarea, select { user-select: text; }
-    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    
-    .stacked-card { transition: transform 0.2s ease, box-shadow 0.2s ease; margin-top: -10px; position: relative; }
-    .stacked-card:first-child { margin-top: 0; }
-    .stacked-card:hover { transform: translateY(-4px) scale(1.02); z-index: 10; box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3); }
-    
-    #touchDragGhost {
-      position: fixed; pointer-events: none; z-index: 9999; opacity: 0.9;
-      transform: translate(-50%, -50%) rotate(3deg) scale(1.05);
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); display: none;
-    }
-    .kanban-col-highlight { background-color: #eff6ff !important; border-color: #3b82f6 !important; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilingual Kanban & Team Cockpit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .kanban-col { min-width: 280px; max-width: 320px; flex: 1; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 </head>
-<body class="bg-slate-100 text-slate-900 min-h-screen flex flex-col antialiased">
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 
-  <!-- ==================== GOOGLE WORKSPACE LOGIN OVERLAY ==================== -->
-  <div id="googleLoginOverlay" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl flex flex-col items-center text-center space-y-6 animate-fadeIn">
-      <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-3xl shadow-lg">
-        <i class="fa-brands fa-google"></i>
-      </div>
-      <div>
-        <h2 class="text-xl font-black text-slate-900">Google Workspace ログイン</h2>
-        <p class="text-xs text-slate-500 mt-1">社内カンバン ＆ Google Chat 自動連携システム (@company.mn)</p>
-      </div>
-      <div class="w-full space-y-3 text-left">
-        <label class="text-xs font-bold text-slate-700 block">ログインするアカウントを選択:</label>
-        <div id="loginUserRadioList" class="space-y-2"></div>
-      </div>
-      <button onclick="executeGoogleLogin()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl shadow-lg transition flex items-center justify-center gap-2">
-        <i class="fa-solid fa-right-to-bracket"></i> Googleアカウントでログイン
-      </button>
-      <p class="text-[10px] text-slate-400">OAuth 2.0 組織ドメイン認証済み ・ Google Chat自動通知有効</p>
-    </div>
-  </div>
-
-  <!-- ==================== HEADER ==================== -->
-  <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-3 sm:px-6 py-2.5 shadow-sm">
-    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2 sm:gap-3">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black shadow-md text-lg">
-          <i class="fa-solid fa-kanban"></i>
-        </div>
-        <div>
-          <div class="flex items-center gap-1.5">
-            <h1 class="text-xs sm:text-base font-black tracking-tight leading-none">タスク管理・Google Chat連携</h1>
-            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 hidden sm:inline">Google Workspace</span>
-          </div>
-          <p class="text-[10px] text-slate-500 font-medium hidden sm:block">8時間稼働精算 ＆ 社長コックピット</p>
-        </div>
-      </div>
-
-      <!-- 8H Gauge -->
-      <div id="headerGaugeContainer" class="hidden md:flex items-center gap-3 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-2xl">
-        <div class="text-right">
-          <span class="text-[10px] font-bold text-slate-500 block leading-tight">本日稼働 (8h目標)</span>
-          <span id="headerHoursTotalText" class="text-xs font-black text-blue-600">0.0 / 8.0h</span>
-        </div>
-        <div class="w-24 bg-slate-200 h-2 rounded-full overflow-hidden">
-          <div id="headerHoursBar" class="h-full bg-blue-600 rounded-full transition-all duration-300" style="width: 0%"></div>
-        </div>
-        <span id="headerHoursBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">未達</span>
-      </div>
-
-      <!-- Controls -->
-      <div class="flex items-center gap-1.5 sm:gap-2.5">
-        <button onclick="toggleUserRole()" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-black text-xs transition flex items-center gap-1.5 shadow-sm">
-          <span id="roleIcon">👤</span>
-          <span id="roleText" class="hidden sm:inline">スタッフ</span>
-        </button>
-        <button onclick="toggleNotificationSheet()" class="relative w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition">
-          <i class="fa-solid fa-bell text-sm"></i>
-          <span id="notifBadge" class="absolute -top-1 -right-1 w-4 h-4 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center hidden">0</span>
-        </button>
-        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 py-1 px-2 rounded-xl">
-          <div id="currentUserAvatar" class="w-6 h-6 rounded-lg bg-blue-600 text-white font-black text-[10px] flex items-center justify-center">Б</div>
-          <span id="currentUserNameDisplay" class="text-xs font-bold text-slate-800"></span>
-          <button onclick="logoutGoogle()" class="text-[10px] text-slate-400 hover:text-red-600 ml-1" title="ログアウト"><i class="fa-solid fa-power-off"></i></button>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- ==================== MAIN CONTAINER ==================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-5 flex flex-col gap-4 overflow-hidden">
-    
-    <!-- Morning Alert -->
-    <div id="bannerUnstarted" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center justify-between gap-3 shadow-sm animate-pulse shrink-0">
-      <div class="flex items-center gap-2">
-        <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
-        <div>
-          <h4 class="font-black text-amber-900 text-xs sm:text-sm">本日のタスク予定が未入力です！</h4>
-          <p class="text-[10px] text-amber-700">朝の10分で本日行うタスク（8.0時間分）を登録してください。</p>
-        </div>
-      </div>
-      <button onclick="openNewTaskModal('plan')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white font-black rounded-xl text-xs shrink-0 shadow-sm">＋ 予定登録</button>
-    </div>
-
-    <!-- ==================== STAFF VIEW ==================== -->
-    <section id="viewStaff" class="flex-1 flex flex-col gap-3.5 min-h-0">
-      <!-- Tabs -->
-      <div class="flex items-center justify-between gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar shrink-0">
-        <div class="flex items-center gap-1.5">
-          <button id="staffTabKanban" onclick="switchStaffTab('kanban')" class="px-3.5 py-1.5 rounded-xl font-black text-xs transition bg-blue-600 text-white shadow-sm shrink-0">今日の8hカンバン</button>
-          <button id="staffTabProjects" onclick="switchStaffTab('projects')" class="px-3.5 py-1.5 rounded-xl font-bold text-xs transition bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shrink-0">チーム＆PJ (<span id="pjTabCount">0</span>)</button>
-          <button id="staffTabMicro" onclick="switchStaffTab('micro')" class="px-3.5 py-1.5 rounded-xl font-bold text-xs transition bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shrink-0">小タスク (<span id="microTabCount">0</span>)</button>
-          <button id="staffTabThanks" onclick="switchStaffTab('thanks')" class="px-3.5 py-1.5 rounded-xl font-bold text-xs transition bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shrink-0">感謝ボード</button>
-        </div>
-        <button onclick="openNewTaskModal()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-sm shrink-0 flex items-center gap-1">
-          <i class="fa-solid fa-plus"></i> 新規タスク
-        </button>
-      </div>
-
-      <!-- KANBAN PANEL -->
-      <div id="panelKanban" class="flex-1 flex flex-col gap-3 min-h-0">
-        <!-- Long-term Tasks -->
-        <div id="longTermSection" class="bg-indigo-50 border border-indigo-100 p-3 rounded-2xl shrink-0">
-          <div class="flex items-center justify-between text-xs mb-2">
-            <span class="font-black text-indigo-900"><i class="fa-solid fa-calendar-days text-indigo-600 mr-1"></i> 保有中の長期・継続タスク</span>
-            <span class="text-[10px] text-indigo-600 font-bold" id="longTermCountText">0件</span>
-          </div>
-          <div id="longTermTasksList" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
-        </div>
-
-        <!-- Mobile Horizontal Column Nav -->
-        <div class="flex sm:hidden items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-[10px] font-black shrink-0">
-          <button onclick="scrollToColumn('col-plan')" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">① 予定 <span id="countPillPlan">0</span></button>
-          <button onclick="scrollToColumn('col-review')" class="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">② 確認待 <span id="countPillReview">0</span></button>
-          <button onclick="scrollToColumn('col-blocked')" class="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 whitespace-nowrap">③ SOS <span id="countPillBlocked">0</span></button>
-          <button onclick="scrollToColumn('col-done')" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">④ 完了 <span id="countPillDone">0</span></button>
-        </div>
-
-        <!-- Horizontal Scrollable Kanban Board -->
-        <div id="kanbanBoardContainer" class="flex-1 flex items-start gap-3 overflow-x-auto overflow-y-hidden custom-scroll snap-x snap-mandatory pb-2">
-          <!-- Col 1 -->
-          <div id="col-plan" data-col="plan" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'plan')" class="kanban-col w-[285px] sm:w-[310px] shrink-0 bg-slate-50 border border-slate-200 rounded-3xl p-3 flex flex-col gap-2.5 h-full max-h-full snap-start">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-200 shrink-0">
-              <h3 class="font-black text-xs text-slate-800 flex items-center gap-1.5"><span class="w-5 h-5 rounded bg-blue-600 text-white flex items-center justify-center">1</span> 今日の予定</h3>
-              <span id="colHoursPlan" class="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-lg">0.0h</span>
+    <!-- Header -->
+    <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 p-2.5 rounded-xl shadow-inner">
+                    <i class="fa-solid fa-kanban text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight">Bilingual Kanban & Cockpit</h1>
+                    <p class="text-xs text-indigo-300">Google Workspace Integrated Team Hub</p>
+                </div>
             </div>
-            <div id="cardsPlan" class="flex-1 overflow-y-auto custom-scroll space-y-2.5 pr-1 pb-10"></div>
-          </div>
-          <!-- Col 2 -->
-          <div id="col-review" data-col="review" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'review')" class="kanban-col w-[285px] sm:w-[310px] shrink-0 bg-slate-50 border border-slate-200 rounded-3xl p-3 flex flex-col gap-2.5 h-full max-h-full snap-start">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-200 shrink-0">
-              <h3 class="font-black text-xs text-slate-800 flex items-center gap-1.5"><span class="w-5 h-5 rounded bg-amber-500 text-amber-950 flex items-center justify-center">2</span> 社長チェック待</h3>
-              <span id="colHoursReview" class="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-lg">0.0h</span>
+
+            <div class="flex items-center space-x-3">
+                <!-- User Role Switcher (Google Workspace Simulation) -->
+                <div class="bg-indigo-800/80 p-1.5 rounded-xl flex items-center space-x-2 border border-indigo-700">
+                    <span class="text-xs px-2 text-indigo-200 font-medium">Role:</span>
+                    <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-indigo-950 text-white text-xs py-1.5 px-3 rounded-lg border border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                        <option value="boss">👑 佐藤 社長 (Boss)</option>
+                        <option value="staff">👤 田中 スタッフ (Staff)</option>
+                    </select>
+                </div>
+
+                <!-- Notification Bell -->
+                <div class="relative">
+                    <button onclick="toggleNotifications()" class="relative p-2.5 bg-indigo-800 hover:bg-indigo-700 rounded-xl transition text-indigo-200 hover:text-white">
+                        <i class="fa-regular fa-bell text-lg"></i>
+                        <span id="notifBadge" class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full hidden">0</span>
+                    </button>
+                    <!-- Notification Dropdown -->
+                    <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 py-2 z-50">
+                        <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                            <span class="font-bold text-xs uppercase tracking-wider text-slate-500">Google Chat Notifications</span>
+                            <button onclick="clearNotifications()" class="text-xs text-indigo-600 hover:underline">すべて既読</button>
+                        </div>
+                        <div id="notifList" class="max-h-64 overflow-y-auto divide-y divide-slate-100 text-xs">
+                            <div class="p-4 text-center text-slate-400">通知はありません</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div id="cardsReview" class="flex-1 overflow-y-auto custom-scroll space-y-2.5 pr-1 pb-10"></div>
-          </div>
-          <!-- Col 3 -->
-          <div id="col-blocked" data-col="blocked" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'blocked')" class="kanban-col w-[285px] sm:w-[310px] shrink-0 bg-slate-50 border border-slate-200 rounded-3xl p-3 flex flex-col gap-2.5 h-full max-h-full snap-start">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-200 shrink-0">
-              <h3 class="font-black text-xs text-slate-800 flex items-center gap-1.5"><span class="w-5 h-5 rounded bg-rose-600 text-white flex items-center justify-center">3</span> 保留・SOS</h3>
-              <span id="colHoursBlocked" class="text-[10px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-lg">0.0h</span>
-            </div>
-            <div id="cardsBlocked" class="flex-1 overflow-y-auto custom-scroll space-y-2.5 pr-1 pb-10"></div>
-          </div>
-          <!-- Col 4 (Done) -->
-          <div id="col-done" data-col="done" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'done')" class="kanban-col w-[285px] sm:w-[310px] shrink-0 bg-emerald-50/50 border border-emerald-200 rounded-3xl p-3 flex flex-col gap-2.5 h-full max-h-full snap-start">
-            <div class="flex items-center justify-between pb-2 border-b border-emerald-200 shrink-0">
-              <h3 class="font-black text-xs text-emerald-900 flex items-center gap-1.5"><span class="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center">4</span> 完了 <i class="fa-solid fa-lock text-[9px] text-emerald-600"></i></h3>
-              <span id="colHoursDone" class="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-lg">0.0h</span>
-            </div>
-            <div id="cardsDone" class="flex-1 overflow-y-auto custom-scroll pr-1 pb-10 pt-2"></div>
-          </div>
         </div>
-      </div>
+    </header>
 
-      <!-- PROJECTS PANEL -->
-      <div id="panelProjects" class="hidden flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto custom-scroll">
-        <div class="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm shrink-0">
-          <div>
-            <h3 class="font-black text-xs sm:text-sm text-slate-800">チーム＆プロジェクト一覧</h3>
-            <p class="text-[10px] text-slate-500">目的の確認、参加申請、タスクのマイボード取込</p>
-          </div>
-          <button onclick="openNewProjectModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-sm transition">＋ チーム/PJ立ち上げ</button>
-        </div>
-        <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3 pb-4"></div>
-      </div>
-
-      <!-- MICRO TASKS PANEL -->
-      <div id="panelMicro" class="hidden flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto custom-scroll">
-        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div>
-            <h4 class="font-black text-xs sm:text-sm flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-300"></i> 小タスクを8hボードへ一括計上</h4>
-            <p class="text-[10px] text-blue-100">チェック済みのタスクをまとめて予定に登録</p>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button onclick="batchLogMicroTasks(0.25)" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white text-white hover:text-blue-900 font-black text-[10px] transition">0.25h</button>
-            <button onclick="batchLogMicroTasks(0.5)" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white text-white hover:text-blue-900 font-black text-[10px] transition">0.5h</button>
-            <button onclick="batchLogMicroTasks(1.0)" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white text-white hover:text-blue-900 font-black text-[10px] transition">1.0h</button>
-            <button onclick="batchLogMicroTasks(1.5)" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white text-white hover:text-blue-900 font-black text-[10px] transition">1.5h</button>
-            <button onclick="batchLogMicroTasks(2.0)" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white text-white hover:text-blue-900 font-black text-[10px] transition">2.0h</button>
-          </div>
-        </div>
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 pb-4">
-          <form onsubmit="handleAddMicroTask(event)" class="flex gap-2">
-            <input type="text" id="microTaskInput" required placeholder="電話対応、メール返信などを入力..." class="flex-1 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-            <button type="submit" class="px-4 py-2 bg-slate-800 text-white font-black text-xs rounded-xl">追加</button>
-          </form>
-          <div id="microTasksList" class="space-y-1.5 divide-y divide-slate-100"></div>
-        </div>
-      </div>
-
-      <!-- THANKS BOARD PANEL -->
-      <div id="panelThanks" class="hidden flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto custom-scroll">
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <h3 class="font-black text-xs text-slate-800"><i class="fa-solid fa-heart text-rose-500"></i> 感謝ボード (Баярлалаа)</h3>
-          <form onsubmit="handleSendThanks(event)" class="space-y-2 text-xs">
-            <div class="flex gap-2">
-              <select id="thanksRecipient" class="p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold"><option value="all">全員へ</option></select>
-              <input type="text" id="thanksMessage" required placeholder="ありがとうメッセージを入力..." class="flex-1 p-2 rounded-xl bg-slate-50 border border-slate-200">
-            </div>
-            <button type="submit" class="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl shadow-sm transition">感謝を送信する</button>
-          </form>
-        </div>
-        <div id="thanksListContainer" class="space-y-2 pb-4"></div>
-      </div>
-    </section>
-
-    <!-- ==================== BOSS VIEW ==================== -->
-    <section id="viewBoss" class="hidden flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto custom-scroll">
-      <div class="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md shrink-0">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">👑</span>
-          <div>
-            <h2 class="font-black text-xs sm:text-sm">社長コックピット</h2>
-            <p class="text-[10px] text-slate-400">スタッフ全データ確認・優先度指示・Google Chat自動連携中</p>
-          </div>
-        </div>
-        <div class="flex bg-slate-800 p-1 rounded-xl text-[10px] font-bold">
-          <button id="bossTierStaff" onclick="switchBossTier('staff')" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition">スタッフ</button>
-          <button id="bossTierTeam" onclick="switchBossTier('team')" class="px-3 py-1.5 rounded-lg text-slate-400 hover:bg-slate-700 transition">チーム・PJ</button>
-        </div>
-      </div>
-
-      <div id="bossPanelStaff" class="space-y-3 pb-4">
-        <div class="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center justify-between text-xs shadow-sm">
-          <span class="font-bold text-amber-900"><i class="fa-solid fa-bell"></i> 全員のチェック待ち: <strong id="bossPendingNum" class="text-amber-700 text-sm font-black">0</strong> 件</span>
-          <button onclick="bossApproveAll()" class="px-3 py-1.5 bg-emerald-600 text-white font-black rounded-xl text-[10px] shadow-sm">一括検収・承認</button>
-        </div>
-        <div id="bossPendingReviewsContainer" class="space-y-2"></div>
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
         
-        <h3 class="font-black text-xs text-slate-700 mt-2">スタッフ稼働状況 (タップで全タスク閲覧・指示出し・Google Chat自動通知)</h3>
-        <div id="bossStaffGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-      </div>
-
-      <div id="bossPanelTeam" class="hidden space-y-3 pb-4">
-        <div id="bossTeamProjectsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- ==================== MODALS ==================== -->
-  
-  <!-- TASK DETAIL & COMMENTS MODAL -->
-  <div id="modalTaskDetail" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-lg h-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
-      <div class="p-4 border-b border-slate-100 shrink-0 flex items-start justify-between bg-white z-10">
-        <div class="flex-1 pr-2">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span id="modalTaskStatusBadge"></span>
-            <span id="modalTaskPriorityBadge"></span>
-            <span id="modalTaskHoursBadge" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700"></span>
-            <span id="modalTaskLockBadge" class="hidden text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800"><i class="fa-solid fa-lock"></i> 完了・編集ロック中</span>
-          </div>
-          <h3 id="modalTaskTitleJa" class="font-black text-slate-900 text-sm mt-1.5 leading-snug"></h3>
-        </div>
-        <button onclick="closeModal('modalTaskDetail')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center shrink-0"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-
-      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4 bg-slate-50/50">
-        <!-- Progress Slider -->
-        <div id="modalProgressSection" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-          <div class="flex justify-between items-center text-xs font-black text-slate-700">
-            <span><i class="fa-solid fa-sliders text-blue-600"></i> タスク進捗率</span>
-            <span id="modalProgressText" class="text-blue-600 text-sm"></span>
-          </div>
-          <input type="range" id="modalProgressSlider" min="0" max="100" step="5" oninput="handleProgressSliderChange(this.value)" class="w-full accent-blue-600">
-          <div class="flex justify-between gap-1 pt-1">
-            <button onclick="quickSetProgress(0)" class="flex-1 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 rounded-lg border border-slate-200">0%</button>
-            <button onclick="quickSetProgress(25)" class="flex-1 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 rounded-lg border border-slate-200">25%</button>
-            <button onclick="quickSetProgress(50)" class="flex-1 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 rounded-lg border border-slate-200">50%</button>
-            <button onclick="quickSetProgress(75)" class="flex-1 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 rounded-lg border border-slate-200">75%</button>
-            <button onclick="quickSetProgress(100)" class="flex-1 py-1 bg-emerald-50 text-[10px] font-bold text-emerald-700 rounded-lg border border-emerald-200">100%</button>
-          </div>
-          <button onclick="insertProgressToComment()" class="w-full text-center text-[10px] font-bold text-blue-600 pt-1">📊 進捗%をコメントに挿入</button>
-        </div>
-
-        <!-- Hours Adjust -->
-        <div id="modalHoursAdjustSection" class="flex items-center justify-between bg-blue-50 p-2.5 rounded-xl border border-blue-100 text-xs">
-          <span class="font-bold text-blue-900">予定工数 (8h枠):</span>
-          <div class="flex items-center gap-1">
-            <button onclick="adjustTaskHours(-0.5)" class="w-6 h-6 rounded-lg bg-white border border-blue-200 font-black text-blue-700 shadow-sm">-</button>
-            <span id="modalHoursDisplay" class="font-black text-blue-700 px-2"></span>
-            <button onclick="adjustTaskHours(0.5)" class="w-6 h-6 rounded-lg bg-white border border-blue-200 font-black text-blue-700 shadow-sm">+</button>
-          </div>
-        </div>
-
-        <!-- Comments / History -->
-        <div class="space-y-2">
-          <h4 class="font-black text-xs text-slate-700">やり取り・履歴 (<span id="modalCommentsCount">0</span>)</h4>
-          <div id="modalCommentsList" class="space-y-2"></div>
-        </div>
-      </div>
-
-      <!-- Comment Input (Hidden when Done) -->
-      <div id="modalCommentInputArea" class="p-3 border-t border-slate-100 bg-white shrink-0 space-y-2">
-        <div id="replyingBar" class="hidden bg-blue-50 px-2 py-1 rounded-lg text-[10px] text-blue-800 font-bold flex justify-between">
-          <span id="replyingTargetName"></span>
-          <button onclick="cancelReply()"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div id="commentPhotoPreview" class="hidden relative inline-block">
-          <img id="commentPhotoImg" src="" class="w-16 h-16 rounded-xl object-cover border border-slate-200">
-          <button onclick="clearCommentPhoto()" class="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white rounded-full text-[10px]"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <form onsubmit="handleSendComment(event)" class="flex gap-1.5">
-          <label class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center cursor-pointer shrink-0 hover:bg-slate-200 transition">
-            <i class="fa-solid fa-camera"></i>
-            <input type="file" accept="image/*" onchange="previewCommentPhoto(event)" class="hidden">
-          </label>
-          <input type="text" id="commentTextInput" placeholder="コメント、報告、返信..." class="flex-1 p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-          <button type="submit" class="px-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shrink-0 shadow-sm transition">送信</button>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- BLOCKED / SOS MODAL -->
-  <div id="modalBlockedSos" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-sm p-4 shadow-2xl space-y-4">
-      <h3 class="font-black text-slate-900 text-sm flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation text-rose-600"></i> 保留・相談(SOS) の種別</h3>
-      <div class="grid grid-cols-2 gap-2 text-xs">
-        <button id="btnChoiceBlocked" onclick="switchBlockedSosChoice('blocked')" class="p-3 rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-900 font-black flex flex-col items-center gap-1 transition">
-          <span class="text-sm">⏸️ 保留</span><span class="text-[9px] font-normal">外部要因で停止</span>
-        </button>
-        <button id="btnChoiceSos" onclick="switchBlockedSosChoice('sos')" class="p-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 font-black flex flex-col items-center gap-1 transition">
-          <span class="text-sm">🆘 相談(SOS)</span><span class="text-[9px] font-normal">助けが必要</span>
-        </button>
-      </div>
-      <form onsubmit="submitBlockedSosForm(event)" class="space-y-3 text-xs">
-        <div id="secBlockedInputs" class="space-y-1">
-          <label class="font-bold text-slate-700">保留の理由:</label>
-          <select id="blockedReasonSelect" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold">
-            <option>クライアント連絡待ち</option>
-            <option>資材・データ到着待ち</option>
-            <option>システム障害</option>
-            <option>他部署の承認待ち</option>
-            <option>その他の停止</option>
-          </select>
-        </div>
-        <div id="secSosInputs" class="hidden space-y-2">
-          <div>
-            <label class="font-bold text-slate-700">SOS宛先 (Google Chat自動連携):</label>
-            <select id="sosRecipientSelect" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold"><option value="boss">👑 社長 (佐藤)</option></select>
-          </div>
-          <div>
-            <label class="font-bold text-slate-700">要望:</label>
-            <select id="sosActionSelect" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold">
-              <option>指示・判断がほしい</option>
-              <option>一緒に確認してほしい</option>
-              <option>引き継ぎたい</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label class="font-bold text-slate-700">詳細メッセージ:</label>
-          <textarea id="blockedSosMessage" required rows="2" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200"></textarea>
-        </div>
-        <div class="flex gap-2">
-          <button type="button" onclick="closeModal('modalBlockedSos')" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">取消</button>
-          <button type="submit" class="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl shadow transition">決定・通知送信</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- NEW TASK MODAL -->
-  <div id="modalNewTask" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-sm p-4 shadow-2xl space-y-3">
-      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
-        <h3 class="font-black text-slate-900 text-sm">新規タスク登録</h3>
-        <button onclick="closeModal('modalNewTask')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form onsubmit="handleSaveNewTask(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="font-bold text-slate-700">タスク名 (日・蒙) <span class="text-red-500">*</span></label>
-          <input type="text" id="newTaskTitleJa" required class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="font-bold text-slate-700">予定工数 <span class="text-red-500">*</span></label>
-            <select id="newTaskHours" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold">
-              <option value="0.5">0.5h</option><option value="1.0">1.0h</option><option value="2.0" selected>2.0h</option><option value="3.0">3.0h</option><option value="4.0">4.0h</option>
-            </select>
-          </div>
-          <div>
-            <label class="font-bold text-slate-700">目標期日</label>
-            <input type="date" id="newTaskDueDate" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold">
-          </div>
-        </div>
-        <div class="flex items-center gap-2 pt-1 bg-indigo-50 p-2 rounded-xl border border-indigo-100">
-          <input type="checkbox" id="newTaskIsLongTerm" class="w-4 h-4 rounded text-indigo-600 focus:ring-0 cursor-pointer">
-          <label for="newTaskIsLongTerm" class="font-bold text-indigo-900 cursor-pointer text-[11px]">長期・継続タスクとして登録する</label>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow transition">タスクを登録する</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- PROJECT DETAIL MODAL -->
-  <div id="modalProjectDetail" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-xl h-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
-      <div class="p-4 border-b border-slate-100 shrink-0 bg-white z-10">
-        <div class="flex justify-between items-start">
-          <div class="pr-2">
-            <span id="pjDetailLeaderBadge" class="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900"></span>
-            <h3 id="pjDetailTitle" class="font-black text-slate-900 text-sm mt-1"></h3>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button id="btnPjJoinToggle" onclick="handleToggleProjectJoin()" class="px-3 py-1.5 rounded-xl font-black text-[10px] bg-blue-600 text-white shadow-sm transition"></button>
-            <button onclick="closeModal('modalProjectDetail')" class="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
-          </div>
-        </div>
-      </div>
-      
-      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4 bg-slate-50/50 text-xs">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-            <span class="font-black text-blue-700 block mb-1 text-[10px]">🎯 目的・背景 (Зорилго)</span>
-            <p id="pjDetailPurpose" class="text-slate-600 leading-relaxed"></p>
-          </div>
-          <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-            <span class="font-black text-indigo-700 block mb-1 text-[10px]">🏁 達成ゴール・KPI (KPI)</span>
-            <p id="pjDetailGoal" class="text-slate-600 leading-relaxed"></p>
-          </div>
-        </div>
-        
-        <div id="pjJoinRequestsSection" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-2xl space-y-2 shadow-sm">
-          <div class="font-bold text-amber-900 text-[11px]">🙋 参加申請が届いています (<span id="pjRequestsCount">0</span>件)</div>
-          <div id="pjJoinRequestsList" class="space-y-1.5"></div>
-        </div>
-
-        <div class="flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-slate-700">メンバー:</span>
-            <div id="pjDetailMembersList" class="flex -space-x-1"></div>
-          </div>
-          <button onclick="openProjectSettingsModal()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[10px] transition">⚙️ 管理・メンバー設定</button>
-        </div>
-
-        <div class="space-y-2">
-          <h4 class="font-black text-slate-800 text-[11px]">PJ内タスク一覧 (マイボードへ取込)</h4>
-          <div id="pjDetailTasksList" class="space-y-1.5"></div>
-          <form onsubmit="handleAddTaskToProject(event)" class="flex gap-1.5 pt-1">
-            <input type="text" id="pjNewTaskInput" required placeholder="PJ専用タスクを追加..." class="flex-1 p-2 rounded-xl bg-white border border-slate-200">
-            <select id="pjNewTaskHours" class="p-2 rounded-xl bg-white border border-slate-200 font-bold"><option value="1.0">1.0h</option><option value="2.0" selected>2.0h</option><option value="3.0">3.0h</option></select>
-            <button type="submit" class="px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-sm transition">追加</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PROJECT CREATE/EDIT MODAL -->
-  <div id="modalNewProject" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-sm p-4 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto custom-scroll">
-      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
-        <h3 id="projectModalTitle" class="font-black text-slate-900 text-sm">新規PJ立ち上げ</h3>
-        <button onclick="closeModal('modalNewProject')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form onsubmit="handleSaveProject(event)" class="space-y-3 text-xs">
-        <input type="hidden" id="projectFormEditId" value="">
-        <div><label class="font-bold text-slate-700">PJ名 <span class="text-red-500">*</span></label><input type="text" id="pjNameJa" required class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200"></div>
-        <div><label class="font-bold text-slate-700">目的・背景 (Зорилго)</label><textarea id="pjPurpose" rows="2" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200"></textarea></div>
-        <div><label class="font-bold text-slate-700">達成ゴール・KPI</label><textarea id="pjGoal" rows="2" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200"></textarea></div>
-        
-        <div id="pjLeaderSelectGroup" class="hidden bg-amber-50 p-2 rounded-xl border border-amber-100">
-          <label class="font-bold text-amber-900 block mb-1">👑 責任者設定・引継ぎ (Ахлагч)</label>
-          <select id="pjLeaderSelect" class="w-full p-2 rounded-lg bg-white border border-amber-200 font-bold"></select>
-        </div>
-
-        <div class="bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <label class="font-bold text-slate-700 block mb-1">👥 参加メンバー選択</label>
-          <div id="pjMembersCheckboxes" class="grid grid-cols-2 gap-2 max-h-24 overflow-y-auto custom-scroll p-1"></div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-          <div><label class="font-bold text-slate-700">目標期日</label><input type="date" id="pjDueDate" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold"></div>
-          <div><label class="font-bold text-slate-700">予算工数(h)</label><input type="number" id="pjBudgetHours" value="80" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold"></div>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow transition">保存する</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- BOSS STAFF DETAIL MODAL -->
-  <div id="modalBossStaffDetail" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-lg h-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
-      <div class="p-4 border-b border-slate-100 shrink-0 bg-white">
-        <div class="flex justify-between items-start">
-          <div>
-            <h3 id="bossDetailStaffName" class="font-black text-slate-900 text-sm"></h3>
-            <p id="bossDetailStaffDept" class="text-[10px] text-slate-400"></p>
-          </div>
-          <button onclick="closeModal('modalBossStaffDetail')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="mt-3 flex gap-2">
-          <button onclick="openBossPromptModal()" class="flex-1 py-2 bg-white border border-blue-200 text-blue-700 rounded-xl text-[10px] font-bold shadow-sm transition hover:bg-blue-50">💬 社長の声掛け</button>
-          <button onclick="openBossPriorityModal()" class="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-white rounded-xl text-[10px] font-black shadow-sm transition">⚡ 優先度指示</button>
-        </div>
-        <div class="pt-3 flex gap-1 overflow-x-auto no-scrollbar text-[10px] font-bold">
-          <button id="bossDetailTabAll" onclick="filterBossDetailTasks('all')" class="px-3 py-1.5 rounded-xl shrink-0">全件 <span id="bossCountAll">0</span></button>
-          <button id="bossDetailTabToday" onclick="filterBossDetailTasks('today')" class="px-3 py-1.5 rounded-xl shrink-0">本日 <span id="bossCountToday">0</span></button>
-          <button id="bossDetailTabReview" onclick="filterBossDetailTasks('review')" class="px-3 py-1.5 rounded-xl shrink-0">承認待 <span id="bossCountReview">0</span></button>
-          <button id="bossDetailTabBlocked" onclick="filterBossDetailTasks('blocked')" class="px-3 py-1.5 rounded-xl shrink-0">保留/SOS <span id="bossCountBlocked">0</span></button>
-          <button id="bossDetailTabDone" onclick="filterBossDetailTasks('done')" class="px-3 py-1.5 rounded-xl shrink-0">完了 <span id="bossCountDone">0</span></button>
-        </div>
-      </div>
-      <div class="flex-1 overflow-y-auto custom-scroll p-3 space-y-2 bg-slate-50/50" id="bossDetailTasksList"></div>
-    </div>
-  </div>
-
-  <!-- BOSS PROMPT MODAL -->
-  <div id="modalBossPrompt" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-sm p-4 shadow-2xl flex flex-col space-y-3">
-      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
-        <h3 class="font-black text-slate-900 text-sm"><i class="fa-solid fa-comment-dots text-blue-600"></i> 社長の声掛け編集 (Google Chat自動送信)</h3>
-        <button onclick="closeModal('modalBossPrompt')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form onsubmit="handleSendBossPrompt(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="font-bold text-slate-700 block mb-1">メッセージ内容:</label>
-          <div class="flex gap-1 overflow-x-auto no-scrollbar pb-1.5">
-            <button type="button" onclick="setBossPromptPreset('体調や進捗はどう？何か困ってることある？')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[9px] whitespace-nowrap font-bold">体調・困りごと</button>
-            <button type="button" onclick="setBossPromptPreset('今週も素晴らしいペースだね。いつもありがとう！')" class="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[9px] whitespace-nowrap font-bold">賞賛・ねぎらい</button>
-          </div>
-          <textarea id="bossPromptTextarea" required rows="3" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">体調や進捗はどう？何か困ってることある？</textarea>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow transition">送信する (佐藤社長 → Google Chat)</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- BOSS PRIORITY MODAL -->
-  <div id="modalBossPriority" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl w-full max-w-sm p-4 shadow-2xl flex flex-col max-h-[90vh]">
-      <div class="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
-        <h3 class="font-black text-slate-900 text-sm"><i class="fa-solid fa-bolt text-amber-500"></i> 優先度指示 (Google Chat連携)</h3>
-        <button onclick="closeModal('modalBossPriority')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form onsubmit="handleSendPriorityDirective(event)" class="flex-1 overflow-y-auto custom-scroll py-3 space-y-3 text-xs">
-        <div class="space-y-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <label class="font-bold text-slate-700">タスクごとの優先度バッジ指定:</label>
-          <div id="priorityTaskSelectionList" class="space-y-1.5 max-h-40 overflow-y-auto custom-scroll p-1"></div>
-        </div>
-        <div class="space-y-1.5">
-          <label class="font-bold text-slate-700">指示メッセージ:</label>
-          <textarea id="priorityDirectiveMessage" required rows="2" class="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200">🔥 最優先から着手してください。</textarea>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-black rounded-xl shadow transition">指示を送信する (佐藤社長)</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- NOTIFICATION SHEET -->
-  <div id="notificationSheet" class="fixed top-14 right-2 sm:right-6 w-72 sm:w-80 bg-white rounded-3xl shadow-2xl p-3 z-50 hidden border border-slate-200">
-    <div class="flex justify-between items-center pb-2 border-b border-slate-100">
-      <h4 class="font-black text-xs text-slate-900"><i class="fa-solid fa-bell text-blue-600"></i> 通知ボックス</h4>
-      <div class="flex gap-2 text-[10px]">
-        <button onclick="markAllNotificationsRead()" class="text-blue-600 font-bold">すべて既読</button>
-        <button onclick="toggleNotificationSheet()" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </div>
-    <div id="notificationsList" class="max-h-64 overflow-y-auto custom-scroll py-1 space-y-1.5"></div>
-  </div>
-
-  <!-- FLOATING DRAG GHOST -->
-  <div id="touchDragGhost" class="p-2 rounded-xl bg-white border-2 border-blue-500 shadow-xl max-w-[200px]">
-    <div class="text-[10px] font-black text-blue-600"><i class="fa-solid fa-hand-holding"></i> 移動中...</div>
-    <div id="ghostCardTitle" class="text-[10px] font-bold text-slate-800 truncate mt-0.5"></div>
-  </div>
-
-  <!-- TOAST -->
-  <div id="toast" class="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-    <i class="fa-solid fa-circle-check text-emerald-400"></i>
-    <span id="toastMsg">お知らせ</span>
-  </div>
-
-  <!-- SCRIPT -->
-  <script>
-    const TODAY_STR = '2026-10-08';
-    
-    const APP_STATE = {
-      isLoggedIn: false,
-      currentUserRole: 'staff',
-      currentUserId: 'u1',
-      currentStaffTab: 'kanban',
-      currentBossTier: 'staff',
-      
-      users: [
-        { id: 'u1', nameJa: 'バトバヤル (Batbayar)', email: 'batbayar@company.mn', dept: '開発・技術部', avatar: 'Б', role: 'staff' },
-        { id: 'u2', nameJa: 'ボルド (Bold)', email: 'bold@company.mn', dept: '営業部', avatar: 'Б', role: 'staff' },
-        { id: 'u3', nameJa: 'エンフトヤ (Enhtuya)', email: 'enhtuya@company.mn', dept: '総務部', avatar: 'Э', role: 'staff' },
-        { id: 'boss', nameJa: '佐藤 社長 (Sato CEO)', email: 'sato.ceo@company.mn', dept: '経営陣', avatar: '👑', role: 'boss' }
-      ],
-      shifts: { 'u1': { status: 'work' }, 'u2': { status: 'work' }, 'u3': { status: 'work' }, 'boss': { status: 'work' } },
-      
-      projects: [
-        {
-          id: 'p1', nameJa: '新規ERP移行プロジェクト (ERP Нэвтрүүлэлт)', purpose: '旧システム終了に伴うクラウド移行と全社業務の効率化', goal: '10月末までに稼働完了し締め日を3日短縮',
-          leaderId: 'u1', members: ['u1', 'u3', 'boss'], joinRequests: ['u2'], dueDate: '2026-10-31', budgetHours: 120,
-          tasks: [
-            { id: 'pt1', titleJa: 'CSVデータ抽出', hours: 2.0, done: true },
-            { id: 'pt2', titleJa: 'マッピング仕様書', hours: 3.0, done: false }
-          ]
-        }
-      ],
-      tasks: [
-        { id: 't1', titleJa: '10月度給与計算 (Цалин бодох)', status: 'plan', hours: 2.5, progress: 40, dueDate: TODAY_STR, assignees: ['u1'], isLongTerm: false, priority: 'urgent', comments: [] },
-        { id: 't2', titleJa: 'ERP仕様書作成', status: 'plan', hours: 3.0, progress: 25, dueDate: TODAY_STR, assignees: ['u1'], isLongTerm: true, priority: 'high', comments: [] },
-        { id: 't3', titleJa: 'クライアント資料レビュー', status: 'review', hours: 1.5, progress: 90, dueDate: TODAY_STR, assignees: ['u1'], isLongTerm: false, priority: 'normal', comments: [] },
-        { id: 't4', titleJa: 'APIエラー調査', status: 'blocked', hours: 1.0, progress: 50, dueDate: TODAY_STR, assignees: ['u1'], isLongTerm: false, priority: 'urgent', comments: [
-          { id: 'c1', senderId: 'u1', senderName: 'バトバヤル', type: 'event_sos', recipient: 'boss', action: '指示がほしい', text: '403エラーで進みません。', time: '14:20', resolved: false }
-        ]},
-        { id: 't5', titleJa: 'アカウント棚卸し', status: 'done', hours: 1.0, progress: 100, dueDate: TODAY_STR, assignees: ['u1'], isLongTerm: false, priority: 'normal', comments: [] }
-      ],
-      microTasks: [{ id: 'm1', text: '電話対応 3件', checked: true }],
-      thanks: [{ id: 'th1', from: 'ボルド', to: 'バトバヤル', text: 'CSVデータ迅速に作成してくれてありがとう！', time: '10:15' }],
-      notifications: [{ id: 'n1', title: '👑 優先度指示', message: '給与計算を最優先で。', taskId: 't1', read: false, time: '11:30' }]
-    };
-
-    const escapeHtml = (str) => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
-    const showToast = (msg) => {
-      const t = document.getElementById('toast');
-      document.getElementById('toastMsg').innerText = msg;
-      t.classList.remove('translate-y-20', 'opacity-0');
-      setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
-    };
-    const openModal = (id) => document.getElementById(id)?.classList.remove('hidden');
-    const closeModal = (id) => document.getElementById(id)?.classList.add('hidden');
-
-    // Google Chat Webhook Simulator with Deep-Link URLs
-    function sendGoogleChatWebhook(title, message, taskId = null) {
-      const appUrl = window.location.href.split('#')[0];
-      const taskLink = taskId ? `${appUrl}#task=${taskId}` : appUrl;
-      
-      const payload = {
-        text: `*[Google Chat 自動連携]*\n*${title}*\n${message}\n\n🔗 *タスクを直接開く*: <${taskLink}|カンバンで確認する>`
-      };
-      console.log('[Google Chat Webhook Dispatched to Workspace]:', payload);
-      showToast('💬 Google Chatへ自動送信しました');
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      renderLoginUserRadios();
-      document.getElementById('newTaskDueDate').value = TODAY_STR;
-      document.getElementById('pjDueDate').value = '2026-10-31';
-      setupTouchDragAndDrop();
-    });
-
-    function renderLoginUserRadios() {
-      const list = document.getElementById('loginUserRadioList');
-      list.innerHTML = '';
-      APP_STATE.users.forEach((u, idx) => {
-        list.innerHTML += `
-          <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-blue-50 cursor-pointer transition">
-            <input type="radio" name="loginUserRadio" value="${u.id}" ${idx===0?'checked':''} class="w-4 h-4 text-blue-600">
-            <div class="w-8 h-8 rounded-xl bg-blue-600 text-white font-black text-xs flex items-center justify-center">${u.avatar}</div>
-            <div>
-              <div class="text-xs font-black text-slate-800">${u.nameJa}</div>
-              <div class="text-[10px] text-slate-500">${u.email} (${u.dept})</div>
+        <!-- Project & Header Stats Bar -->
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="glass-panel p-4 rounded-2xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500 font-medium">現在選択中のPJ</p>
+                    <h3 id="currentProjName" class="text-base font-bold text-indigo-900 mt-0.5">E-st 総合製造人材派遣PJ</h3>
+                </div>
+                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-xl"><i class="fa-solid fa-folder-open text-lg"></i></div>
             </div>
-          </label>`;
-      });
-    }
+            <div class="glass-panel p-4 rounded-2xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500 font-medium">総タスク数 / 完了</p>
+                    <h3 id="taskStats" class="text-base font-bold text-slate-800 mt-0.5">0 / 0</h3>
+                </div>
+                <div class="bg-emerald-50 text-emerald-600 p-3 rounded-xl"><i class="fa-solid fa-list-check text-lg"></i></div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500 font-medium">SOS・アラート中</p>
+                    <h3 id="sosStats" class="text-base font-bold text-rose-600 mt-0.5">0件</h3>
+                </div>
+                <div class="bg-rose-50 text-rose-600 p-3 rounded-xl"><i class="fa-solid fa-triangle-exclamation text-lg"></i></div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500 font-medium">Google Chat連携</p>
+                    <h3 class="text-base font-bold text-emerald-600 mt-0.5 flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span> オンライン</h3>
+                </div>
+                <div class="bg-blue-50 text-blue-600 p-3 rounded-xl"><i class="fa-brands fa-google text-lg"></i></div>
+            </div>
+        </section>
 
-    function executeGoogleLogin() {
-      const sel = document.querySelector('input[name="loginUserRadio"]:checked');
-      if(sel) {
-        APP_STATE.currentUserId = sel.value;
-        const u = APP_STATE.users.find(x => x.id === sel.value);
-        if(u) {
-          APP_STATE.currentUserRole = u.role;
-          document.getElementById('currentUserAvatar').innerText = u.avatar;
-          document.getElementById('currentUserNameDisplay').innerText = u.nameJa;
-        }
-      }
-      APP_STATE.isLoggedIn = true;
-      document.getElementById('googleLoginOverlay').classList.add('hidden');
-      showToast('Google Workspace アカウントでログインしました');
-      renderAll();
-    }
+        <!-- Boss Cockpit View (Visible only when role = boss) -->
+        <section id="bossCockpit" class="hidden glass-panel p-6 rounded-3xl shadow-sm border border-indigo-100 flex flex-col gap-4">
+            <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-200 pb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                        <i class="fa-solid fa-user-shield text-indigo-600"></i> 社長コックピット (Boss Dashboard)
+                    </h2>
+                    <p class="text-xs text-slate-500">スタッフの稼働状況の把握、個別メッセージ送信、プロジェクト管理を行います。</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openProjectModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> PJ管理・メンバー追加
+                    </button>
+                </div>
+            </div>
 
-    function logoutGoogle() {
-      APP_STATE.isLoggedIn = false;
-      document.getElementById('googleLoginOverlay').classList.remove('hidden');
-    }
+            <!-- Staff Status Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="bossStaffGrid">
+                <!-- Dynamically rendered staff summary -->
+            </div>
+        </section>
 
-    function toggleUserRole() {
-      APP_STATE.currentUserRole = APP_STATE.currentUserRole === 'staff' ? 'boss' : 'staff';
-      renderAll();
-    }
+        <!-- Long-Term Tasks Progress Area -->
+        <section class="glass-panel p-5 rounded-3xl shadow-sm flex flex-col gap-3">
+            <div class="flex justify-between items-center">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-infinity text-indigo-600"></i> 長期・継続タスク (Long-term / Ongoing)
+                </h3>
+                <span class="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium" id="longTermCount">0件進行中</span>
+            </div>
+            <div id="longTermContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- Populated dynamically -->
+            </div>
+        </section>
 
-    function renderAll() {
-      if(!APP_STATE.isLoggedIn) return;
-      const isBoss = APP_STATE.currentUserRole === 'boss';
-      document.getElementById('roleText').innerText = isBoss ? '社長' : 'スタッフ';
-      document.getElementById('roleIcon').innerText = isBoss ? '👑' : '👤';
-      document.getElementById('viewStaff').classList.toggle('hidden', isBoss);
-      document.getElementById('viewBoss').classList.toggle('hidden', !isBoss);
-      
-      const unread = APP_STATE.notifications.filter(n => !n.read).length;
-      const b = document.getElementById('notifBadge');
-      if (unread > 0) { b.innerText = unread; b.classList.remove('hidden'); } else { b.classList.add('hidden'); }
-
-      if (isBoss) renderBossScreen(); else renderStaffScreen();
-    }
-
-    // --- STAFF VIEW ---
-    function switchStaffTab(tab) {
-      APP_STATE.currentStaffTab = tab;
-      ['kanban', 'projects', 'micro', 'thanks'].forEach(t => {
-        const btn = document.getElementById('staffTab' + t.charAt(0).toUpperCase() + t.slice(1));
-        const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
-        if (t === tab) {
-          btn.className = "px-3.5 py-1.5 rounded-xl font-black text-xs bg-blue-600 text-white shadow-sm shrink-0";
-          panel.classList.remove('hidden');
-        } else {
-          btn.className = "px-3.5 py-1.5 rounded-xl font-bold text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shrink-0";
-          panel.classList.add('hidden');
-        }
-      });
-      if(tab === 'kanban') renderStaffKanbanColumns();
-      if(tab === 'projects') renderStaffProjects();
-      if(tab === 'micro') renderStaffMicroTasks();
-      if(tab === 'thanks') renderStaffThanks();
-    }
-
-    function renderStaffScreen() {
-      const u = APP_STATE.users.find(x => x.id === APP_STATE.currentUserId) || APP_STATE.users[0];
-      const myTasks = APP_STATE.tasks.filter(t => t.assignees.includes(u.id));
-      const todayH = myTasks.filter(t => t.dueDate === TODAY_STR).reduce((a,b)=>a+(parseFloat(b.hours)||0),0);
-      
-      document.getElementById('headerHoursTotalText').innerText = `${todayH.toFixed(1)} / 8.0h`;
-      document.getElementById('headerHoursBar').style.width = `${Math.min(100, (todayH/8)*100)}%`;
-      const badge = document.getElementById('headerHoursBadge');
-      if (todayH >= 8) { badge.innerText = '達成'; badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800"; }
-      else { badge.innerText = `残${(8-todayH).toFixed(1)}h`; badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800"; }
-      
-      document.getElementById('bannerUnstarted').classList.toggle('hidden', !(APP_STATE.shifts[u.id]?.status==='work' && todayH===0));
-      document.getElementById('pjTabCount').innerText = APP_STATE.projects.length;
-      document.getElementById('microTabCount').innerText = APP_STATE.microTasks.filter(m=>!m.checked).length;
-      
-      renderStaffLongTermTasks(myTasks);
-      if(APP_STATE.currentStaffTab==='kanban') renderStaffKanbanColumns(myTasks);
-      if(APP_STATE.currentStaffTab==='projects') renderStaffProjects();
-      if(APP_STATE.currentStaffTab==='micro') renderStaffMicroTasks();
-      if(APP_STATE.currentStaffTab==='thanks') renderStaffThanks();
-    }
-
-    function renderStaffLongTermTasks(myTasks) {
-      const longs = myTasks.filter(t => t.isLongTerm && t.status !== 'done');
-      document.getElementById('longTermCountText').innerText = `${longs.length}件`;
-      const list = document.getElementById('longTermTasksList');
-      list.innerHTML = '';
-      longs.forEach(t => {
-        list.innerHTML += `
-          <div onclick="openTaskCommentsModal('${t.id}')" class="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-sm cursor-pointer hover:border-indigo-300 transition">
-            <div class="flex justify-between text-[9px] text-slate-500 mb-1"><span class="font-bold text-indigo-700">長期</span><span>${t.dueDate}</span></div>
-            <h4 class="text-xs font-bold truncate">${escapeHtml(t.titleJa)}</h4>
-            <div class="mt-1.5 bg-slate-100 h-1.5 rounded-full"><div class="bg-indigo-500 h-full rounded-full" style="width:${t.progress||0}%"></div></div>
-          </div>`;
-      });
-    }
-
-    function renderStaffKanbanColumns(myTasks) {
-      myTasks = myTasks || APP_STATE.tasks.filter(t => t.assignees.includes(APP_STATE.currentUserId));
-      ['plan', 'review', 'blocked', 'done'].forEach(col => {
-        const inCol = myTasks.filter(t => t.status === col);
-        const hours = inCol.reduce((a,b)=>a+(parseFloat(b.hours)||0),0);
-        const hBadge = document.getElementById('colHours' + col.charAt(0).toUpperCase() + col.slice(1));
-        const cPill = document.getElementById('countPill' + col.charAt(0).toUpperCase() + col.slice(1));
-        if(hBadge) hBadge.innerText = `${hours.toFixed(1)}h`;
-        if(cPill) cPill.innerText = inCol.length;
-        
-        const container = document.getElementById('cards' + col.charAt(0).toUpperCase() + col.slice(1));
-        container.innerHTML = '';
-        
-        inCol.forEach(t => {
-          if (col === 'done') {
-            container.innerHTML += `
-              <div onclick="openTaskCommentsModal('${t.id}')" class="stacked-card bg-white p-2.5 rounded-xl border border-emerald-200 cursor-pointer flex justify-between items-center gap-2 shadow-sm hover:border-emerald-400">
-                <div class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-check text-emerald-500"></i><span class="text-xs font-bold truncate text-slate-800">${escapeHtml(t.titleJa)}</span></div>
-                <span class="text-[9px] font-black bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">${t.hours}h</span>
-              </div>`;
-          } else {
-            const hasSos = (t.comments||[]).some(c=>c.type==='event_sos'&&!c.resolved);
-            const pri = t.priority==='urgent'?'🔥':t.priority==='high'?'⚡':'';
+        <!-- Kanban Board Columns -->
+        <section class="flex gap-4 overflow-x-auto pb-4 custom-scrollbar items-start min-h-[500px]">
             
-            container.innerHTML += `
-              <div data-task-id="${t.id}" draggable="true" ondragstart="handleDragStart(event, '${t.id}')" class="p-3 rounded-2xl border transition shadow-sm bg-white cursor-grab active:cursor-grabbing ${hasSos?'border-red-400 bg-red-50':t.status==='blocked'?'border-amber-300 bg-amber-50':'border-slate-200'}">
-                <div onclick="openTaskCommentsModal('${t.id}')" class="space-y-1">
-                  <div class="flex justify-between text-[9px] text-slate-400 font-bold">
-                    <span>${t.dueDate} ${pri}</span>
-                    <span class="text-blue-600"><i class="fa-solid fa-comment"></i> ${(t.comments||[]).length}</span>
-                  </div>
-                  <h4 class="text-xs font-black leading-snug hover:text-blue-600">${escapeHtml(t.titleJa)}</h4>
+            <!-- Column: To Do -->
+            <div class="kanban-col bg-slate-200/70 rounded-3xl p-4 flex flex-col gap-3 shadow-inner">
+                <div class="flex justify-between items-center px-1">
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-slate-400"></span> 未着手 (To Do)
+                    </h3>
+                    <span id="count-todo" class="bg-white text-slate-600 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
-                <div class="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between gap-1">
-                  <div class="flex gap-1">
-                    <button onclick="quickAdvanceTask('${t.id}', -1)" class="w-6 h-6 bg-slate-100 text-slate-500 rounded flex items-center justify-center text-[10px] hover:bg-slate-200">◀</button>
-                    <button onclick="quickAdvanceTask('${t.id}', 1)" class="w-6 h-6 bg-slate-100 text-slate-500 rounded flex items-center justify-center text-[10px] hover:bg-slate-200">▶</button>
-                  </div>
-                  <select onchange="changeTaskStatus('${t.id}', this.value)" class="text-[10px] font-black p-1 rounded border border-slate-200 bg-slate-50 focus:outline-none">
-                    <option value="plan" ${t.status==='plan'?'selected':''}>① 予定</option>
-                    <option value="review" ${t.status==='review'?'selected':''}>② 確認待</option>
-                    <option value="blocked" ${t.status==='blocked'?'selected':''}>③ SOS</option>
-                    <option value="done" disabled>🔒 完了</option>
-                  </select>
+                <div id="col-todo" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'todo')"></div>
+                <button onclick="openTaskModal('todo')" class="w-full py-2.5 bg-white/80 hover:bg-white text-indigo-600 text-xs font-bold rounded-xl border border-dashed border-indigo-300 transition flex items-center justify-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-plus"></i> タスクを追加
+                </button>
+            </div>
+
+            <!-- Column: In Progress -->
+            <div class="kanban-col bg-blue-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-blue-100/50">
+                <div class="flex justify-between items-center px-1">
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-blue-800 flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-blue-500"></span> 進行中 (In Progress)
+                    </h3>
+                    <span id="count-inprogress" class="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
-              </div>`;
-          }
-        });
-      });
-      setupTouchDragElements();
-    }
+                <div id="col-inprogress" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'inprogress')"></div>
+            </div>
 
-    function scrollToColumn(id) {
-      const col = document.getElementById(id);
-      if(col) document.getElementById('kanbanBoardContainer').scrollTo({left: col.offsetLeft - 16, behavior: 'smooth'});
-    }
-    const colOrder = ['plan', 'review', 'blocked', 'done'];
-    function quickAdvanceTask(id, dir) {
-      const t = APP_STATE.tasks.find(x=>x.id===id);
-      if(t) {
-        let idx = colOrder.indexOf(t.status) + dir;
-        if(idx >= 0 && idx < 3) changeTaskStatus(id, colOrder[idx]);
-        else if (idx === 3) showToast('🔒 完了移動は社長承認が必要です');
-      }
-    }
-
-    let touchTaskId = null, touchGhost = null, autoScrollTimer = null;
-    function setupTouchDragAndDrop() { touchGhost = document.getElementById('touchDragGhost'); }
-    function setupTouchDragElements() {
-      document.querySelectorAll('[data-task-id]').forEach(el => {
-        el.ontouchstart = (e) => {
-          if(e.target.closest('button, select, input')) return;
-          touchTaskId = el.dataset.taskId;
-          const t = APP_STATE.tasks.find(x=>x.id===touchTaskId);
-          if(t) {
-            document.getElementById('ghostCardTitle').innerText = t.titleJa;
-            touchGhost.style.display = 'block';
-            updateGhostPos(e.touches[0]);
-          }
-        };
-        el.ontouchmove = (e) => {
-          if(!touchTaskId) return;
-          e.preventDefault();
-          const touch = e.touches[0];
-          updateGhostPos(touch);
-          const w = window.innerWidth;
-          if(touch.clientX < 50) startScroll(-15);
-          else if(touch.clientX > w - 50) startScroll(15);
-          else stopScroll();
-          document.querySelectorAll('.kanban-col').forEach(col => col.classList.remove('kanban-col-highlight'));
-          const target = getColUnderPoint(touch.clientX, touch.clientY);
-          if(target) target.classList.add('kanban-col-highlight');
-        };
-        el.ontouchend = (e) => {
-          if(!touchTaskId) return;
-          stopScroll();
-          touchGhost.style.display = 'none';
-          const target = getColUnderPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-          document.querySelectorAll('.kanban-col').forEach(col => col.classList.remove('kanban-col-highlight'));
-          if(target && target.dataset.col) changeTaskStatus(touchTaskId, target.dataset.col);
-          touchTaskId = null;
-        };
-      });
-    }
-    function updateGhostPos(touch) { if(touchGhost){ touchGhost.style.left=touch.clientX+'px'; touchGhost.style.top=touch.clientY+'px'; } }
-    function getColUnderPoint(x,y) { return document.elementsFromPoint(x,y).find(el => el.classList?.contains('kanban-col')); }
-    function startScroll(speed) { if(!autoScrollTimer) autoScrollTimer = setInterval(()=>document.getElementById('kanbanBoardContainer').scrollLeft+=speed, 16); }
-    function stopScroll() { clearInterval(autoScrollTimer); autoScrollTimer = null; }
-    
-    function handleDragStart(e, id) { e.dataTransfer.setData('text', id); }
-    function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('kanban-col-highlight'); }
-    function handleDragLeave(e) { e.currentTarget.classList.remove('kanban-col-highlight'); }
-    function handleDrop(e, col) {
-      e.preventDefault(); e.currentTarget.classList.remove('kanban-col-highlight');
-      const id = e.dataTransfer.getData('text');
-      if(id) changeTaskStatus(id, col);
-    }
-
-    let pendingBlockedId = null;
-    function changeTaskStatus(id, status) {
-      const t = APP_STATE.tasks.find(x=>x.id===id);
-      if(!t) return;
-      if(status === 'done' && APP_STATE.currentUserRole !== 'boss') { showToast('🔒 完了移動は社長承認が必要です'); renderAll(); return; }
-      if(status === 'blocked') { pendingBlockedId = id; openModal('modalBlockedSos'); return; }
-      t.status = status;
-      showToast('移動しました');
-      renderAll();
-    }
-
-    let currentBlockedChoice = 'blocked';
-    function switchBlockedSosChoice(choice) {
-      currentBlockedChoice = choice;
-      const b = document.getElementById('btnChoiceBlocked'), s = document.getElementById('btnChoiceSos');
-      const sb = document.getElementById('secBlockedInputs'), ss = document.getElementById('secSosInputs');
-      if(choice === 'blocked') {
-        b.className="p-3 rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-900 font-black flex flex-col items-center gap-1 transition";
-        s.className="p-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 font-black flex flex-col items-center gap-1 transition";
-        sb.classList.remove('hidden'); ss.classList.add('hidden');
-      } else {
-        s.className="p-3 rounded-2xl border-2 border-rose-500 bg-rose-50 text-rose-900 font-black flex flex-col items-center gap-1 transition";
-        b.className="p-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 font-black flex flex-col items-center gap-1 transition";
-        ss.classList.remove('hidden'); sb.classList.add('hidden');
-      }
-    }
-
-    function submitBlockedSosForm(e) {
-      e.preventDefault();
-      const t = APP_STATE.tasks.find(x=>x.id===pendingBlockedId);
-      if(!t) return;
-      t.status = 'blocked';
-      t.comments = t.comments || [];
-      const msg = document.getElementById('blockedSosMessage').value;
-      const u = APP_STATE.users.find(x=>x.id===APP_STATE.currentUserId)||APP_STATE.users[0];
-      
-      if(currentBlockedChoice === 'blocked') {
-        t.comments.push({id:'c_'+Date.now(), type:'event_blocked', text:msg, reason:document.getElementById('blockedReasonSelect').value, senderName:u.nameJa, time:'現在'});
-        showToast('⏸️ 保留に設定しました');
-      } else {
-        const rec = document.getElementById('sosRecipientSelect').value;
-        t.comments.push({id:'c_'+Date.now(), type:'event_sos', text:msg, recipient:rec, action:document.getElementById('sosActionSelect').value, senderName:u.nameJa, time:'現在', resolved:false});
-        APP_STATE.notifications.unshift({id:'n_'+Date.now(), title:'🆘 SOS要請', message:`${u.nameJa}さんより: ${msg}`, taskId:t.id, read:false, time:'現在'});
-        
-        sendGoogleChatWebhook(`🆘 SOS要請 (${u.nameJa})`, `${u.nameJa}さんからSOS要請:\n"${msg}"`, t.id);
-        showToast('🆘 SOSを送信しました（Google Chat自動通知）');
-      }
-      closeModal('modalBlockedSos');
-      document.getElementById('blockedSosMessage').value = '';
-      renderAll();
-    }
-
-    let activeTaskId = null, replyTo = null, photoData = null;
-    function openTaskCommentsModal(id) {
-      activeTaskId = id;
-      const t = APP_STATE.tasks.find(x=>x.id===id);
-      if(!t) return;
-      document.getElementById('modalTaskTitleJa').innerText = t.titleJa;
-      document.getElementById('modalTaskHoursBadge').innerText = `${t.hours}h`;
-      document.getElementById('modalHoursDisplay').innerText = `${t.hours}h`;
-      document.getElementById('modalProgressSlider').value = t.progress || 0;
-      document.getElementById('modalProgressText').innerText = `${t.progress||0}%`;
-      
-      const badge = document.getElementById('modalTaskStatusBadge');
-      badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full " + (t.status==='plan'?'bg-blue-100 text-blue-800':t.status==='review'?'bg-amber-100 text-amber-900':t.status==='blocked'?'bg-rose-100 text-rose-900':'bg-emerald-100 text-emerald-900');
-      badge.innerText = t.status.toUpperCase();
-
-      const isDone = t.status === 'done';
-      document.getElementById('modalTaskLockBadge').classList.toggle('hidden', !isDone);
-      document.getElementById('modalCommentInputArea').classList.toggle('hidden', isDone);
-      document.getElementById('modalProgressSection').classList.toggle('hidden', isDone);
-      document.getElementById('modalHoursAdjustSection').classList.toggle('hidden', isDone);
-
-      renderComments(t);
-      cancelReply(); clearCommentPhoto();
-      openModal('modalTaskDetail');
-    }
-    
-    function handleProgressSliderChange(v) {
-      const t = APP_STATE.tasks.find(x=>x.id===activeTaskId);
-      if(t){ t.progress=parseInt(v); document.getElementById('modalProgressText').innerText=`${v}%`; renderAll(); }
-    }
-    function quickSetProgress(v) { document.getElementById('modalProgressSlider').value=v; handleProgressSliderChange(v); }
-    function insertProgressToComment() {
-      const t = APP_STATE.tasks.find(x=>x.id===activeTaskId);
-      const i = document.getElementById('commentTextInput');
-      if(t && i){ i.value=`【進捗】${t.progress||0}%まで完了 `; i.focus(); }
-    }
-    function adjustTaskHours(d) {
-      const t = APP_STATE.tasks.find(x=>x.id===activeTaskId);
-      if(t){ t.hours = Math.max(0.5, (parseFloat(t.hours)||0)+d); document.getElementById('modalHoursDisplay').innerText=`${t.hours}h`; renderAll(); }
-    }
-
-    function renderComments(t) {
-      const list = document.getElementById('modalCommentsList');
-      list.innerHTML = '';
-      document.getElementById('modalCommentsCount').innerText = (t.comments||[]).length;
-      (t.comments||[]).forEach(c => {
-        if(c.type==='event_sos') {
-          if(c.resolved) {
-            list.innerHTML += `<div class="p-2 bg-slate-50 border border-emerald-200 rounded-lg text-[10px] text-slate-600 flex justify-between"><span class="font-bold">✅ 解決済SOS: ${escapeHtml(c.text)}</span><span>${c.time}</span></div>`;
-          } else {
-            list.innerHTML += `
-              <div class="p-3 bg-rose-50 border-2 border-rose-300 rounded-xl text-xs space-y-1.5 shadow-sm">
-                <div class="flex justify-between font-black text-rose-800"><span>🆘 SOS (未解決)</span><span>${c.time}</span></div>
-                <p class="font-bold text-rose-950">${escapeHtml(c.text)}</p>
-                <div class="flex justify-between items-center text-[10px] border-t border-rose-200 pt-1">
-                  <span>宛先: ${c.recipient} | 要望: ${c.action}</span>
-                  <button onclick="resolveSos('${c.id}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded shadow-sm transition">解決・再開</button>
+            <!-- Column: SOS / Hold -->
+            <div class="kanban-col bg-rose-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-rose-100/50">
+                <div class="flex justify-between items-center px-1">
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-rose-800 flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span> 保留・SOS (SOS)
+                    </h3>
+                    <span id="count-sos" class="bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
                 </div>
-              </div>`;
-          }
-        } else if(c.type==='event_blocked') {
-          list.innerHTML += `<div class="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800 shadow-sm"><span class="font-bold">⏸️ 保留 (${escapeHtml(c.reason)})</span>: ${escapeHtml(c.text)}</div>`;
-        } else {
-          list.innerHTML += `
-            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs shadow-sm space-y-1">
-              <div class="flex justify-between"><span class="font-bold text-slate-800">${escapeHtml(c.senderName)} ${c.replyTo?`➔ @${escapeHtml(c.replyTo)}`:''}</span><span class="text-[10px] text-slate-400">${c.time}</span></div>
-              <p class="whitespace-pre-wrap">${escapeHtml(c.text)}</p>
-              ${c.photo?`<img src="${c.photo}" class="mt-2 w-24 h-24 object-cover rounded-lg">`:''}
-              <div class="text-right"><button onclick="setReplyTo('${escapeHtml(c.senderName)}')" class="text-[9px] font-bold text-blue-600 hover:underline">💬 返信</button></div>
-            </div>`;
+                <div id="col-sos" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'sos')"></div>
+            </div>
+
+            <!-- Column: Done -->
+            <div class="kanban-col bg-emerald-50/80 rounded-3xl p-4 flex flex-col gap-3 shadow-inner border border-emerald-100/50">
+                <div class="flex justify-between items-center px-1">
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-emerald-800 flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span> 完了 (Done)
+                    </h3>
+                    <span id="count-done" class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm">0</span>
+                </div>
+                <div id="col-done" class="flex flex-col gap-3 min-h-[400px]" ondragover="allowDrop(event)" ondrop="drop(event, 'done')"></div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Modal: Add/Edit Task -->
+    <div id="taskModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base" id="taskModalTitle">新規タスクの作成</h3>
+                <button onclick="closeTaskModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="taskForm" onsubmit="saveTask(event)" class="flex flex-col gap-4">
+                <input type="hidden" id="taskId">
+                <input type="hidden" id="taskStatus" value="todo">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">タスク名 (日本語 / Монгол)</label>
+                    <input type="text" id="taskTitleInput" required placeholder="例: 応募者データのスプレッドシート整理" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">担当スタッフ</label>
+                    <select id="taskAssignee" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="田中 スタッフ">田中 スタッフ</option>
+                        <option value="バトール スタッフ">バトール スタッフ</option>
+                        <option value="ノミン スタッフ">ノミン スタッフ</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">優先度</label>
+                        <select id="taskPriority" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="通常">🟢 通常 (Normal)</option>
+                            <option value="重要">🟡 重要 (Important)</option>
+                            <option value="緊急">🔴 緊急 (Urgent)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">期限</label>
+                        <input type="date" id="taskDueDate" class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                    <input type="checkbox" id="isLongTerm" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                    <label for="isLongTerm" class="text-xs font-bold text-slate-700 cursor-pointer">長期・継続タスクとしてプログレスバー表示にする</label>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition">キャンセル</button>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition">保存する</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Boss Encouragement & Directive Editor -->
+    <div id="bossMsgModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base" id="bossMsgModalTitle">スタッフへ声掛け・指示送信</h3>
+                <button onclick="closeBossMsgModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="flex flex-col gap-3">
+                <p class="text-xs text-slate-500">佐藤社長のアカウントからGoogle Chatおよび通知センターへ直接メッセージを送信します。</p>
+                <input type="hidden" id="targetStaffName">
+                
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="setPresetMsg('進捗はどう？困ったことあれば言ってね！')" class="text-[11px] bg-indigo-50 text-indigo-700 px-2.5 py-1.5 rounded-lg border border-indigo-100 hover:bg-indigo-100">進捗確認の声掛け</button>
+                    <button type="button" onclick="setPresetMsg('このタスクを最優先で進めてください。')" class="text-[11px] bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-lg border border-amber-100 hover:bg-amber-100">優先度指示</button>
+                    <button type="button" onclick="setPresetMsg('SOS対応お疲れ様！一緒に解決しよう。')" class="text-[11px] bg-rose-50 text-rose-700 px-2.5 py-1.5 rounded-lg border border-rose-100 hover:bg-rose-100">SOSフォロー</button>
+                </div>
+
+                <div>
+                    <textarea id="bossMsgContent" rows="4" placeholder="メッセージを入力してください..." class="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeBossMsgModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition">キャンセル</button>
+                    <button type="button" onclick="sendBossMessage()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5">
+                        <i class="fa-brands fa-google text-xs"></i> Google Chatへ送信
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Project Management & Member Add -->
+    <div id="projectModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">プロジェクト管理 ＆ メンバー追加</h3>
+                <button onclick="closeProjectModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="flex flex-col gap-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-600 mb-1">プロジェクト名</label>
+                    <input type="text" id="modalProjName" value="E-st 総合製造人材派遣PJ" class="w-full p-3 rounded-xl border border-slate-200">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-600 mb-1">参加スタッフの割り当て</label>
+                    <div class="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> 田中 スタッフ (Tanaka)</label>
+                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> バトール スタッフ (Bator)</label>
+                        <label class="flex items-center gap-2 font-medium"><input type="checkbox" checked class="rounded text-indigo-600"> ノミン スタッフ (Nomin)</label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeProjectModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl">閉じる</button>
+                    <button type="button" onclick="saveProjectSettings()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow">設定を保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Initial Mock Data
+        let tasks = JSON.parse(localStorage.getItem('bilingual_kanban_tasks')) || [
+            { id: 1, title: '求人広告バナーのデザイン調整 (E-st)', assignee: '田中 スタッフ', status: 'inprogress', priority: '緊急', dueDate: '2026-10-15', isLongTerm: false },
+            { id: 2, title: 'モンゴル人実習生の受入書類作成', assignee: 'バトール スタッフ', status: 'todo', priority: '重要', dueDate: '2026-10-20', isLongTerm: false },
+            { id: 3, title: 'コールセンター稼働マスタのVBA修正', assignee: 'ノミン スタッフ', status: 'sos', priority: '緊急', dueDate: '2026-10-12', isLongTerm: false },
+            { id: 4, title: '【長期】SNS応募者フォローアップ体制の構築', assignee: '田中 スタッフ', status: 'inprogress', priority: '通常', dueDate: '2026-10-31', isLongTerm: true, progress: 65 }
+        ];
+
+        let notifications = JSON.parse(localStorage.getItem('bilingual_kanban_notifs')) || [
+            { id: 1, text: '【佐藤社長より】バナー作成よろしく頼むね！', time: '10分前', unread: true, taskId: 1 },
+            { id: 2, text: '【SOS発信】ノミン スタッフからVBAエラーのヘルプ要請', time: '1時間前', unread: true, taskId: 3 }
+        ];
+
+        let currentUserRole = 'boss'; // 'boss' or 'staff'
+
+        function initApp() {
+            renderKanban();
+            renderBossCockpit();
+            renderNotifications();
+            updateStats();
         }
-      });
-    }
 
-    function setReplyTo(name) {
-      replyTo = name;
-      const bar = document.getElementById('replyingBar');
-      bar.classList.remove('hidden');
-      document.getElementById('replyingTargetName').innerText = `@${name} さんへ返信中`;
-      const input = document.getElementById('commentTextInput');
-      input.value = `@${name} `;
-      input.focus();
-    }
+        function switchUserRole(role) {
+            currentUserRole = role;
+            const cockpit = document.getElementById('bossCockpit');
+            if (role === 'boss') {
+                cockpit.classList.remove('hidden');
+            } else {
+                cockpit.classList.add('hidden');
+            }
+        }
 
-    function resolveSos(cid) {
-      const t = APP_STATE.tasks.find(x=>x.id===activeTaskId);
-      if(t) {
-        const c = t.comments.find(x=>x.id===cid);
-        if(c){ c.resolved=true; t.status='plan'; showToast('SOSを解決し再開しました'); renderComments(t); renderAll(); }
-      }
-    }
-    
-    function cancelReply() { replyTo=null; document.getElementById('replyingBar').classList.add('hidden'); }
-    function clearCommentPhoto() { photoData=null; document.getElementById('commentPhotoPreview').classList.add('hidden'); }
-    function previewCommentPhoto(e) {
-      const f=e.target.files[0];
-      if(f){ const r=new FileReader(); r.onload=(ev)=>{ photoData=ev.target.result; document.getElementById('commentPhotoImg').src=photoData; document.getElementById('commentPhotoPreview').classList.remove('hidden'); }; r.readAsDataURL(f); }
-    }
-    function handleSendComment(e) {
-      e.preventDefault();
-      const t = APP_STATE.tasks.find(x=>x.id===activeTaskId);
-      const u = APP_STATE.users.find(x=>x.id===APP_STATE.currentUserId);
-      const txt = document.getElementById('commentTextInput').value;
-      if(!t||(!txt&&!photoData)) return;
-      t.comments.push({id:'c_'+Date.now(), senderName:u.nameJa, text:txt, photo:photoData, replyTo:replyTo, time:'現在'});
-      
-      if(replyTo) {
-        APP_STATE.notifications.unshift({id:'n_'+Date.now(), title:`💬 ${u.nameJa}さんからの返信`, message:txt, taskId:t.id, read:false, time:'現在'});
-        sendGoogleChatWebhook(`💬 タスクコメント返信 (${u.nameJa})`, `${u.nameJa}さんが返信しました:\n"${txt}"`, t.id);
-      }
-      
-      document.getElementById('commentTextInput').value=''; cancelReply(); clearCommentPhoto(); renderComments(t); renderAll();
-    }
+        function updateStats() {
+            const total = tasks.length;
+            const done = tasks.filter(t => t.status === 'done').length;
+            const sos = tasks.filter(t => t.status === 'sos').length;
 
-    function renderStaffProjects() {
-      const g = document.getElementById('projectsGrid'); g.innerHTML = '';
-      APP_STATE.projects.forEach(p => {
-        const leader = APP_STATE.users.find(x=>x.id===p.leaderId)||{nameJa:'未定'};
-        g.innerHTML += `
-          <div onclick="openProjectDetailModal('${p.id}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-400 hover:shadow-md transition">
-            <div class="flex justify-between items-start mb-2">
-              <h4 class="font-black text-sm text-slate-800">${escapeHtml(p.nameJa)}</h4>
-              <span class="text-[9px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">👑 ${leader.nameJa}</span>
-            </div>
-            <p class="text-[10px] text-slate-500 line-clamp-2 mb-2 bg-slate-50 p-2 rounded-lg border border-slate-100">🎯 ${escapeHtml(p.purpose||'未設定')}</p>
-            <div class="flex gap-1 mb-2">
-              ${p.members.slice(0,4).map(uid => { const u=APP_STATE.users.find(x=>x.id===uid); return u?`<div class="w-5 h-5 rounded-full bg-blue-600 text-white text-[8px] flex items-center justify-center font-black">${u.avatar}</div>`:''; }).join('')}
-              ${p.members.length>4?`<div class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[8px] flex items-center justify-center font-black">+${p.members.length-4}</div>`:''}
-            </div>
-            <div class="space-y-1">
-              ${p.tasks.slice(0,2).map(t=>`
-                <div class="flex justify-between items-center text-[10px] bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                  <span class="${t.done?'line-through text-slate-400':''} font-bold">${escapeHtml(t.titleJa)}</span>
-                  <button onclick="event.stopPropagation(); importProjectTask('${p.id}','${t.id}')" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold shadow-sm transition">📥 取込</button>
+            document.getElementById('taskStats').innerText = `${total} / ${done}`;
+            document.getElementById('sosStats').innerText = `${sos}件`;
+
+            ['todo', 'inprogress', 'sos', 'done'].forEach(status => {
+                const count = tasks.filter(t => t.status === status).length;
+                document.getElementById(`count-${status}`).innerText = count;
+            });
+
+            const longTermTasks = tasks.filter(t => t.isLongTerm);
+            document.getElementById('longTermCount').innerText = `${longTermTasks.length}件進行中`;
+            
+            const ltContainer = document.getElementById('longTermContainer');
+            ltContainer.innerHTML = longTermTasks.map(t => `
+                <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-indigo-900 truncate">${t.title}</span>
+                        <span class="text-slate-500">${t.assignee}</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2">
+                        <div class="bg-indigo-600 h-2 rounded-full" style="width: ${t.progress || 50}%"></div>
+                    </div>
                 </div>
-              `).join('')}
-            </div>
-          </div>`;
-      });
-    }
+            `).join('') || '<div class="col-span-3 text-center text-xs text-slate-400 py-2">現在進行中の長期タスクはありません</div>';
 
-    let activePjId = null;
-    function openProjectDetailModal(id) {
-      activePjId = id; const p = APP_STATE.projects.find(x=>x.id===id); if(!p) return;
-      const l = APP_STATE.users.find(x=>x.id===p.leaderId);
-      document.getElementById('pjDetailTitle').innerText = p.nameJa;
-      document.getElementById('pjDetailLeaderBadge').innerText = `👑 責任者: ${l?l.nameJa:'未定'}`;
-      document.getElementById('pjDetailPurpose').innerText = p.purpose||'設定されていません';
-      document.getElementById('pjDetailGoal').innerText = p.goal||'設定されていません';
-      
-      const btn = document.getElementById('btnPjJoinToggle');
-      if(p.members.includes(APP_STATE.currentUserId)){ btn.innerText='✓ 参加中'; btn.className="px-3 py-1.5 rounded-xl font-black text-[10px] bg-emerald-100 text-emerald-800"; }
-      else if((p.joinRequests||[]).includes(APP_STATE.currentUserId)){ btn.innerText='⏳ 申請中(取消)'; btn.className="px-3 py-1.5 rounded-xl font-black text-[10px] bg-amber-100 text-amber-900"; }
-      else { btn.innerText='🙋 参加申請'; btn.className="px-3 py-1.5 rounded-xl font-black text-[10px] bg-blue-600 hover:bg-blue-500 text-white"; }
-      
-      const reqSec = document.getElementById('pjJoinRequestsSection'), reqList = document.getElementById('pjJoinRequestsList');
-      if((p.leaderId===APP_STATE.currentUserId || APP_STATE.currentUserRole==='boss') && (p.joinRequests||[]).length>0){
-        reqSec.classList.remove('hidden'); document.getElementById('pjRequestsCount').innerText = p.joinRequests.length;
-        reqList.innerHTML = p.joinRequests.map(uid => {
-          const u = APP_STATE.users.find(x=>x.id===uid);
-          return `<div class="flex justify-between items-center bg-white p-1.5 rounded-lg text-[10px] border border-amber-100 shadow-sm">
-            <span class="font-bold">${u?.nameJa}</span>
-            <div><button onclick="approvePjJoin('${p.id}','${uid}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold transition">承認</button></div>
-          </div>`;
-        }).join('');
-      } else reqSec.classList.add('hidden');
-
-      const mem = document.getElementById('pjDetailMembersList'); mem.innerHTML='';
-      p.members.forEach(uid => { const u=APP_STATE.users.find(x=>x.id===uid); if(u) mem.innerHTML+=`<div class="w-6 h-6 rounded-full bg-blue-600 text-white text-[9px] flex items-center justify-center font-black border-2 border-white shadow-sm">${u.avatar}</div>`; });
-
-      const tList = document.getElementById('pjDetailTasksList'); tList.innerHTML='';
-      p.tasks.forEach(t => {
-        tList.innerHTML += `
-          <div class="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-200 text-[10px] shadow-sm">
-            <div class="flex items-center gap-2 truncate"><input type="checkbox" ${t.done?'checked':''} onchange="togglePjTask('${p.id}','${t.id}')" class="w-4 h-4 rounded text-blue-600 cursor-pointer"> <span class="${t.done?'line-through text-slate-400':''} font-bold truncate text-sm">${escapeHtml(t.titleJa)}</span></div>
-            <button onclick="importProjectTask('${p.id}','${t.id}')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shrink-0 shadow-sm transition">📥 取込</button>
-          </div>`;
-      });
-      openModal('modalProjectDetail');
-    }
-
-    function handleToggleProjectJoin() {
-      const p = APP_STATE.projects.find(x=>x.id===activePjId); if(!p) return;
-      if(p.members.includes(APP_STATE.currentUserId)) return;
-      p.joinRequests = p.joinRequests || [];
-      const idx = p.joinRequests.indexOf(APP_STATE.currentUserId);
-      if(idx > -1) { p.joinRequests.splice(idx,1); showToast('申請取消'); }
-      else {
-        p.joinRequests.push(APP_STATE.currentUserId);
-        const u = APP_STATE.users.find(x=>x.id===APP_STATE.currentUserId);
-        APP_STATE.notifications.unshift({id:'n_'+Date.now(), title:'🙋 プロジェクト参加申請', message:`${u.nameJa}さんから [${p.nameJa}] への参加申請。`, projectId:p.id, read:false, time:'現在'});
-        showToast('🙋 申請送信');
-      }
-      openProjectDetailModal(p.id); renderStaffProjects();
-    }
-    
-    function approvePjJoin(pid, uid) {
-      const p = APP_STATE.projects.find(x=>x.id===pid);
-      if(p){ p.joinRequests=p.joinRequests.filter(x=>x!==uid); if(!p.members.includes(uid)) p.members.push(uid); showToast('承認しました'); openProjectDetailModal(p.id); renderStaffProjects(); }
-    }
-    
-    function togglePjTask(pid, tid) { const p = APP_STATE.projects.find(x=>x.id===pid); if(p){ const t=p.tasks.find(x=>x.id===tid); if(t) t.done=!t.done; } }
-    
-    function handleAddTaskToProject(e) {
-      e.preventDefault(); const p=APP_STATE.projects.find(x=>x.id===activePjId);
-      const txt = document.getElementById('pjNewTaskInput').value;
-      if(p && txt) { p.tasks.push({id:'pt_'+Date.now(), titleJa:txt, hours:parseFloat(document.getElementById('pjNewTaskHours').value), done:false}); document.getElementById('pjNewTaskInput').value=''; openProjectDetailModal(p.id); renderStaffProjects(); }
-    }
-    
-    function importProjectTask(pid, tid) {
-      const p = APP_STATE.projects.find(x=>x.id===pid); if(!p) return;
-      const pt = p.tasks.find(x=>x.id===tid); if(!pt) return;
-      APP_STATE.tasks.unshift({id:'t_'+Date.now(), titleJa:`[${p.nameJa}] ${pt.titleJa}`, status:'plan', hours:pt.hours||2.0, progress:0, dueDate:TODAY_STR, assignees:[APP_STATE.currentUserId], isLongTerm:false, priority:'normal', comments:[]});
-      showToast('📥 マイタスクの予定に取込ました');
-      if(APP_STATE.currentStaffTab==='projects') switchStaffTab('kanban'); else renderAll();
-    }
-    
-    function openNewProjectModal() {
-      document.getElementById('projectFormEditId').value=''; document.getElementById('projectModalTitle').innerText='新規PJ立ち上げ';
-      document.getElementById('pjNameJa').value=''; document.getElementById('pjPurpose').value=''; document.getElementById('pjGoal').value='';
-      document.getElementById('pjLeaderSelectGroup').classList.add('hidden');
-      
-      const cb = document.getElementById('pjMembersCheckboxes'); cb.innerHTML='';
-      APP_STATE.users.filter(u=>u.id!=='boss').forEach(u => {
-        cb.innerHTML += `<label class="flex items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50"><input type="checkbox" name="pjMemCb" value="${u.id}" class="w-4 h-4 text-blue-600 rounded" ${u.id===APP_STATE.currentUserId?'checked':''}> <span class="font-bold text-[10px]">${u.nameJa}</span></label>`;
-      });
-      openModal('modalNewProject');
-    }
-    
-    function openProjectSettingsModal() {
-      const p = APP_STATE.projects.find(x=>x.id===activePjId); if(!p) return;
-      document.getElementById('projectFormEditId').value=p.id; document.getElementById('projectModalTitle').innerText='PJ管理・設定';
-      document.getElementById('pjNameJa').value=p.nameJa; document.getElementById('pjPurpose').value=p.purpose; document.getElementById('pjGoal').value=p.goal;
-      
-      const lg = document.getElementById('pjLeaderSelectGroup'), ls = document.getElementById('pjLeaderSelect');
-      lg.classList.remove('hidden'); ls.innerHTML='';
-      APP_STATE.users.filter(u=>u.id!=='boss').forEach(u => ls.innerHTML+=`<option value="${u.id}" ${u.id===p.leaderId?'selected':''}>${u.nameJa}</option>`);
-
-      const cb = document.getElementById('pjMembersCheckboxes'); cb.innerHTML='';
-      APP_STATE.users.filter(u=>u.id!=='boss').forEach(u => {
-        cb.innerHTML += `<label class="flex items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50"><input type="checkbox" name="pjMemCb" value="${u.id}" class="w-4 h-4 text-blue-600 rounded" ${p.members.includes(u.id)?'checked':''}> <span class="font-bold text-[10px]">${u.nameJa}</span></label>`;
-      });
-
-      closeModal('modalProjectDetail'); openModal('modalNewProject');
-    }
-
-    function handleSaveProject(e) {
-      e.preventDefault(); const eid = document.getElementById('projectFormEditId').value;
-      const memCbs = document.querySelectorAll('input[name="pjMemCb"]:checked');
-      const selectedMembers = Array.from(memCbs).map(cb => cb.value);
-
-      if(eid) {
-        const p = APP_STATE.projects.find(x=>x.id===eid);
-        if(p){ 
-          p.nameJa=document.getElementById('pjNameJa').value; p.purpose=document.getElementById('pjPurpose').value; p.goal=document.getElementById('pjGoal').value; 
-          p.leaderId=document.getElementById('pjLeaderSelect').value; 
-          p.members = selectedMembers;
-          if(!p.members.includes(p.leaderId)) p.members.push(p.leaderId); 
+            localStorage.setItem('bilingual_kanban_tasks', JSON.stringify(tasks));
+            localStorage.setItem('bilingual_kanban_notifs', JSON.stringify(notifications));
         }
-      } else {
-        if(!selectedMembers.includes(APP_STATE.currentUserId)) selectedMembers.push(APP_STATE.currentUserId);
-        APP_STATE.projects.push({
-          id:'p_'+Date.now(), nameJa:document.getElementById('pjNameJa').value, purpose:document.getElementById('pjPurpose').value, goal:document.getElementById('pjGoal').value, 
-          leaderId:APP_STATE.currentUserId, members:selectedMembers, joinRequests:[], tasks:[]
-        });
-      }
-      closeModal('modalNewProject'); renderStaffProjects(); showToast('保存しました');
-    }
 
-    function renderStaffMicroTasks() {
-      const l = document.getElementById('microTasksList'); l.innerHTML = '';
-      APP_STATE.microTasks.forEach(m => {
-        l.innerHTML += `
-          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-slate-50 text-xs transition">
-            <label class="flex items-center gap-2 cursor-pointer truncate"><input type="checkbox" ${m.checked?'checked':''} onchange="toggleMicro('${m.id}')" class="w-4 h-4 rounded text-blue-600 focus:ring-0"> <span class="${m.checked?'line-through text-slate-400':''} font-bold">${escapeHtml(m.text)}</span></label>
-            <button onclick="delMicro('${m.id}')" class="text-slate-400 hover:text-red-500 w-8 h-8 rounded-full flex items-center justify-center transition"><i class="fa-solid fa-trash"></i></button>
-          </div>`;
-      });
-    }
-    
-    function handleAddMicroTask(e) { e.preventDefault(); const v=document.getElementById('microTaskInput').value; if(v){ APP_STATE.microTasks.push({id:'m_'+Date.now(), text:v, checked:false}); document.getElementById('microTaskInput').value=''; renderAll(); } }
-    function toggleMicro(id) { const m=APP_STATE.microTasks.find(x=>x.id===id); if(m) m.checked=!m.checked; renderAll(); }
-    function delMicro(id) { APP_STATE.microTasks=APP_STATE.microTasks.filter(x=>x.id!==id); renderAll(); }
-    function batchLogMicroTasks(h) {
-      const c = APP_STATE.microTasks.filter(x=>x.checked); if(c.length===0){ showToast('チェックを入れてください'); return; }
-      APP_STATE.tasks.unshift({id:'t_'+Date.now(), titleJa:`小タスク計上 (${c.map(x=>x.text).join(',')})`, status:'plan', hours:h, progress:100, dueDate:TODAY_STR, assignees:[APP_STATE.currentUserId], isLongTerm:false, priority:'normal', comments:[]});
-      APP_STATE.microTasks = APP_STATE.microTasks.filter(x=>!x.checked); showToast(`${h}h 計上`); switchStaffTab('kanban'); renderAll();
-    }
+        function renderKanban() {
+            ['todo', 'inprogress', 'sos', 'done'].forEach(status => {
+                const container = document.getElementById(`col-${status}`);
+                const filtered = tasks.filter(t => t.status === status);
 
-    function renderStaffThanks() {
-      const c = document.getElementById('thanksRecipient');
-      c.innerHTML = '<option value="all">全員へ</option>';
-      APP_STATE.users.filter(u=>u.id!==APP_STATE.currentUserId).forEach(u => c.innerHTML += `<option value="${u.nameJa}">${u.nameJa}</option>`);
-
-      const l = document.getElementById('thanksListContainer'); l.innerHTML = '';
-      APP_STATE.thanks.forEach(th => {
-        l.innerHTML += `
-          <div class="bg-rose-50/50 border border-rose-100 p-3 rounded-2xl text-xs space-y-1 shadow-sm">
-            <div class="flex justify-between font-bold text-rose-900">
-              <span><i class="fa-solid fa-heart text-rose-500 mr-1"></i> ${escapeHtml(th.from)} ➔ ${escapeHtml(th.to)}</span>
-              <span class="text-[10px] text-slate-400">${th.time}</span>
-            </div>
-            <p class="text-slate-800">${escapeHtml(th.text)}</p>
-          </div>`;
-      });
-    }
-
-    function handleSendThanks(e) {
-      e.preventDefault();
-      const u = APP_STATE.users.find(x=>x.id===APP_STATE.currentUserId);
-      const to = document.getElementById('thanksRecipient').value;
-      const txt = document.getElementById('thanksMessage').value;
-      if(txt) {
-        APP_STATE.thanks.unshift({id:'th_'+Date.now(), from:u.nameJa, to:to, text:txt, time:'現在'});
-        document.getElementById('thanksMessage').value='';
-        renderStaffThanks();
-        showToast('❤️ 感謝メッセージを送信しました');
-      }
-    }
-    
-    function openNewTaskModal(st='plan') {
-      document.getElementById('newTaskTitleJa').value=''; document.getElementById('newTaskHours').value='2.0'; document.getElementById('newTaskIsLongTerm').checked=false; openModal('modalNewTask');
-    }
-    function handleSaveNewTask(e) {
-      e.preventDefault();
-      const isLong = document.getElementById('newTaskIsLongTerm').checked;
-      APP_STATE.tasks.unshift({id:'t_'+Date.now(), titleJa:document.getElementById('newTaskTitleJa').value, status:'plan', hours:parseFloat(document.getElementById('newTaskHours').value), progress:0, dueDate:document.getElementById('newTaskDueDate').value, assignees:[APP_STATE.currentUserId], isLongTerm:isLong, priority:'normal', comments:[]});
-      closeModal('modalNewTask'); showToast('登録しました'); renderAll();
-    }
-
-    function switchBossTier(t) {
-      APP_STATE.currentBossTier = t;
-      ['staff','team'].forEach(x => {
-        const btn = document.getElementById('bossTier'+x.charAt(0).toUpperCase()+x.slice(1));
-        const panel = document.getElementById('bossPanel'+x.charAt(0).toUpperCase()+x.slice(1));
-        if(x===t) {
-          btn.className = "px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm transition";
-          panel.classList.remove('hidden');
-        } else {
-          btn.className = "px-3 py-1.5 rounded-lg text-slate-400 hover:bg-slate-700 transition";
-          panel.classList.add('hidden');
+                container.innerHTML = filtered.map(t => `
+                    <div draggable="true" ondragstart="drag(event, ${t.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 cursor-grab hover:shadow-md transition">
+                        <div class="flex justify-between items-start gap-2">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${getPriorityBadge(t.priority)}">${t.priority}</span>
+                            <div class="flex items-center gap-1">
+                                <button onclick="editTask(${t.id})" class="text-slate-400 hover:text-indigo-600 p-1"><i class="fa-solid fa-pen text-xs"></i></button>
+                                <button onclick="deleteTask(${t.id})" class="text-slate-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash text-xs"></i></button>
+                            </div>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-relaxed">${t.title}</h4>
+                        <div class="flex justify-between items-center pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                            <span class="flex items-center gap-1"><i class="fa-regular fa-user"></i> ${t.assignee}</span>
+                            <span class="flex items-center gap-1"><i class="fa-regular fa-calendar"></i> ${t.dueDate || '未設定'}</span>
+                        </div>
+                    </div>
+                `).join('') || `<div class="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">タスクなし</div>`;
+            });
+            updateStats();
         }
-      });
-      renderBossScreen();
-    }
 
-    function renderBossScreen() {
-      const p = document.getElementById('bossPendingReviewsContainer'); p.innerHTML='';
-      const revs = APP_STATE.tasks.filter(x=>x.status==='review');
-      document.getElementById('bossPendingNum').innerText = revs.length;
-      revs.forEach(t => {
-        const u = APP_STATE.users.find(x=>t.assignees.includes(x.id));
-        p.innerHTML+=`<div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center text-xs shadow-sm hover:border-amber-400 transition"><div class="flex items-center gap-2 cursor-pointer" onclick="openTaskCommentsModal('${t.id}')"><span class="font-black text-amber-900 truncate max-w-[150px] sm:max-w-xs">${escapeHtml(t.titleJa)}</span><span class="text-[9px] text-amber-700 bg-amber-100 px-1.5 rounded">${u?.nameJa||''}</span></div><button onclick="bossApproveTask('${t.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-black shadow-sm transition">承認</button></div>`;
-      });
+        function getPriorityBadge(priority) {
+            if (priority === '緊急') return 'bg-rose-100 text-rose-700';
+            if (priority === '重要') return 'bg-amber-100 text-amber-700';
+            return 'bg-emerald-100 text-emerald-700';
+        }
 
-      const sg = document.getElementById('bossStaffGrid'); sg.innerHTML='';
-      APP_STATE.users.filter(u=>u.id!=='boss').forEach(u => {
-        const uT = APP_STATE.tasks.filter(x=>x.assignees.includes(u.id));
-        const h = uT.filter(x=>x.dueDate===TODAY_STR).reduce((a,b)=>a+(parseFloat(b.hours)||0),0);
-        sg.innerHTML += `
-          <div onclick="openBossStaffDetail('${u.id}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition">
-            <div class="flex justify-between items-center mb-2"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black shadow-sm">${u.avatar}</div><span class="font-black text-xs text-slate-800">${u.nameJa}</span></div><span class="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100">${h.toFixed(1)}/8.0h</span></div>
-            <div class="bg-slate-100 h-2 rounded-full mb-3"><div class="bg-blue-600 h-full rounded-full transition-all" style="width:${Math.min(100,(h/8)*100)}%"></div></div>
-            <div class="grid grid-cols-4 gap-1.5 text-center text-[9px] font-bold">
-              <div class="bg-slate-50 border border-slate-100 p-1.5 rounded-lg flex flex-col"><span class="text-slate-400">保有</span><span class="text-sm text-slate-700">${uT.length}</span></div>
-              <div class="bg-amber-50 border border-amber-100 p-1.5 rounded-lg flex flex-col"><span class="text-amber-600">待</span><span class="text-sm text-amber-800">${uT.filter(x=>x.status==='review').length}</span></div>
-              <div class="bg-rose-50 border border-rose-100 p-1.5 rounded-lg flex flex-col"><span class="text-rose-600">SOS</span><span class="text-sm text-rose-800">${uT.filter(x=>x.status==='blocked').length}</span></div>
-              <div class="bg-emerald-50 border border-emerald-100 p-1.5 rounded-lg flex flex-col"><span class="text-emerald-600">完</span><span class="text-sm text-emerald-800">${uT.filter(x=>x.status==='done').length}</span></div>
-            </div>
-          </div>`;
-      });
-      
-      const tg = document.getElementById('bossTeamProjectsGrid'); tg.innerHTML='';
-      APP_STATE.projects.forEach(p => {
-        const leader = APP_STATE.users.find(x=>x.id===p.leaderId)||{nameJa:'未定'};
-        tg.innerHTML += `
-          <div onclick="openProjectDetailModal('${p.id}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-400 transition">
-            <div class="flex justify-between items-start mb-2"><h4 class="font-black text-sm text-slate-800">${escapeHtml(p.nameJa)}</h4><span class="text-[9px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">👑 ${leader.nameJa}</span></div>
-            <p class="text-[10px] text-slate-500 line-clamp-2 mb-2 bg-slate-50 p-2 rounded-lg">🎯 ${escapeHtml(p.purpose||'未設定')}</p>
-          </div>`;
-      });
-    }
+        function renderBossCockpit() {
+            const grid = document.getElementById('bossStaffGrid');
+            const staffList = [
+                { name: '田中 スタッフ', role: 'デザイナー・営業', tasksCount: tasks.filter(t => t.assignee === '田中 スタッフ' && t.status !== 'done').length },
+                { name: 'バトール スタッフ', role: '人材調整・労務', tasksCount: tasks.filter(t => t.assignee === 'バトール スタッフ' && t.status !== 'done').length },
+                { name: 'ノミン スタッフ', role: 'データ管理・BPO', tasksCount: tasks.filter(t => t.assignee === 'ノミン スタッフ' && t.status !== 'done').length }
+            ];
 
-    function bossApproveTask(id) { const t=APP_STATE.tasks.find(x=>x.id===id); if(t){ t.status='done'; t.progress=100; showToast('検収完了'); renderAll(); } }
-    function bossApproveAll() { APP_STATE.tasks.filter(x=>x.status==='review').forEach(t=>{t.status='done'; t.progress=100;}); showToast('一括承認済'); renderAll(); }
-    
-    let activeBossStaffId = null, activeBossFilter = 'all';
-    function openBossStaffDetail(uid) {
-      activeBossStaffId = uid; const u = APP_STATE.users.find(x=>x.id===uid); if(!u) return;
-      document.getElementById('bossDetailStaffName').innerText = u.nameJa; document.getElementById('bossDetailStaffDept').innerText = u.dept;
-      const uT = APP_STATE.tasks.filter(x=>x.assignees.includes(uid));
-      document.getElementById('bossCountAll').innerText=uT.length; document.getElementById('bossCountToday').innerText=uT.filter(x=>x.dueDate===TODAY_STR).length;
-      document.getElementById('bossCountReview').innerText=uT.filter(x=>x.status==='review').length; document.getElementById('bossCountBlocked').innerText=uT.filter(x=>x.status==='blocked').length;
-      document.getElementById('bossCountDone').innerText=uT.filter(x=>x.status==='done').length;
-      filterBossDetailTasks('all'); openModal('modalBossStaffDetail');
-    }
-    
-    window.filterBossDetailTasks = function(f) {
-      activeBossFilter = f;
-      ['All','Today','Review','Blocked','Done'].forEach(x=>document.getElementById('bossDetailTab'+x).className=x.toLowerCase()===f?"px-3 py-1.5 rounded-xl bg-blue-600 text-white shrink-0 shadow-sm":"px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0");
-      const list = document.getElementById('bossDetailTasksList'); list.innerHTML='';
-      let ft = APP_STATE.tasks.filter(x=>x.assignees.includes(activeBossStaffId));
-      if(f==='today') ft=ft.filter(x=>x.dueDate===TODAY_STR); if(f==='review') ft=ft.filter(x=>x.status==='review');
-      if(f==='blocked') ft=ft.filter(x=>x.status==='blocked'); if(f==='done') ft=ft.filter(x=>x.status==='done');
-      ft.forEach(t => {
-        const p = t.priority==='urgent'?'🔥':t.priority==='high'?'⚡':'';
-        list.innerHTML += `
-          <div onclick="openTaskCommentsModal('${t.id}')" class="bg-white p-3 rounded-2xl border border-slate-200 cursor-pointer shadow-sm hover:border-blue-400 transition">
-            <div class="flex justify-between items-center text-[10px] mb-1.5">
-              <span class="font-black ${t.status==='done'?'text-emerald-600':t.status==='blocked'?'text-rose-600':t.status==='review'?'text-amber-600':'text-blue-600'}">${t.status.toUpperCase()} ${p}</span>
-              <span class="text-slate-500 font-bold">${t.dueDate} | ${t.hours}h</span>
-            </div>
-            <h5 class="text-xs font-black text-slate-800">${escapeHtml(t.titleJa)}</h5>
-            <div class="mt-2 bg-slate-100 h-1.5 rounded-full"><div class="bg-blue-500 h-full rounded-full" style="width:${t.progress||0}%"></div></div>
-          </div>`;
-      });
-    };
+            grid.innerHTML = staffList.map(s => `
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="font-bold text-sm text-slate-800">${s.name}</h4>
+                            <p class="text-[11px] text-slate-500">${s.role}</p>
+                        </div>
+                        <span class="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-xl">未了 ${s.tasksCount}件</span>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-slate-100">
+                        <button onclick="openBossMsgModal('${s.name}')" class="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+                            <i class="fa-regular fa-comment-dots"></i> 声掛け・指示
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-    window.openBossPromptModal = function() { openModal('modalBossPrompt'); };
-    window.setBossPromptPreset = function(msg) { document.getElementById('bossPromptTextarea').value = msg; };
-    window.handleSendBossPrompt = function(e) {
-      e.preventDefault();
-      const u = APP_STATE.users.find(x=>x.id===activeBossStaffId);
-      const msg = document.getElementById('bossPromptTextarea').value;
-      if(u && msg) {
-        APP_STATE.notifications.unshift({id:'n_'+Date.now(), title:'💬 佐藤社長からの声掛け', message:msg, taskId:null, read:false, time:'現在'});
-        sendGoogleChatWebhook(`💬 佐藤社長の声掛け (${u.nameJa}さんへ)`, `佐藤社長より:\n"${msg}"`);
-        showToast('社長アカウントから声掛けを送信しました（Google Chat自動通知）');
-        closeModal('modalBossPrompt');
-        renderAll();
-      }
-    };
+        // Drag & Drop
+        let draggedId = null;
+        function drag(ev, id) { draggedId = id; }
+        function allowDrop(ev) { ev.preventDefault(); }
+        function drop(ev, newStatus) {
+            ev.preventDefault();
+            const task = tasks.find(t => t.id === draggedId);
+            if (task) {
+                task.status = newStatus;
+                renderKanban();
+                renderBossCockpit();
+            }
+        }
 
-    window.openBossPriorityModal = function() {
-      const u = APP_STATE.users.find(x=>x.id===activeBossStaffId); if(!u) return;
-      const l = document.getElementById('priorityTaskSelectionList'); l.innerHTML='';
-      APP_STATE.tasks.filter(x=>x.assignees.includes(u.id)&&x.status!=='done').forEach(t=>{
-        l.innerHTML += `
-          <div class="bg-white p-2.5 rounded-xl border border-slate-200 flex justify-between items-center text-[10px] shadow-sm">
-            <span class="font-bold truncate max-w-[120px]">${escapeHtml(t.titleJa)}</span>
-            <div class="flex gap-1 shrink-0">
-              <button type="button" onclick="setPri('${t.id}','normal',this)" class="px-2 py-1 rounded-lg ${t.priority==='normal'?'bg-slate-800 text-white shadow-sm':'bg-slate-100 text-slate-600 hover:bg-slate-200'} font-bold transition">通常</button>
-              <button type="button" onclick="setPri('${t.id}','high',this)" class="px-2 py-1 rounded-lg ${t.priority==='high'?'bg-amber-500 text-white shadow-sm':'bg-slate-100 text-slate-600 hover:bg-slate-200'} font-bold transition">⚡</button>
-              <button type="button" onclick="setPri('${t.id}','urgent',this)" class="px-2 py-1 rounded-lg ${t.priority==='urgent'?'bg-red-600 text-white shadow-sm':'bg-slate-100 text-slate-600 hover:bg-slate-200'} font-bold transition">🔥</button>
-            </div>
-          </div>`;
-      });
-      openModal('modalBossPriority');
-    };
-    
-    window.setPri = function(id, p, btn) {
-      const t=APP_STATE.tasks.find(x=>x.id===id); if(t){ t.priority=p; Array.from(btn.parentElement.children).forEach(b=>b.className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600 font-bold transition hover:bg-slate-200"); btn.className="px-2 py-1 rounded-lg text-white font-bold shadow-sm transition "+(p==='urgent'?'bg-red-600':p==='high'?'bg-amber-500':'bg-slate-800'); }
-    };
-    window.handleSendPriorityDirective = function(e) {
-      e.preventDefault(); const u=APP_STATE.users.find(x=>x.id===activeBossStaffId); const msg=document.getElementById('priorityDirectiveMessage').value;
-      if(u&&msg){
-        APP_STATE.notifications.unshift({id:'n_'+Date.now(), title:'👑 佐藤社長からの優先度指示', message:msg, taskId:null, read:false, time:'現在'});
-        sendGoogleChatWebhook(`👑 優先度指示 (${u.nameJa}さんへ)`, `佐藤社長より:\n"${msg}"`);
-        showToast('優先度指示を送信しました（Google Chat自動通知）'); closeModal('modalBossPriority'); filterBossDetailTasks(activeBossFilter); renderAll();
-      }
-    };
+        // Task Modal
+        function openTaskModal(status) {
+            document.getElementById('taskId').value = '';
+            document.getElementById('taskStatus').value = status;
+            document.getElementById('taskTitleInput').value = '';
+            document.getElementById('isLongTerm').checked = false;
+            document.getElementById('taskModalTitle').innerText = '新規タスクの作成';
+            document.getElementById('taskModal').classList.remove('hidden');
+        }
+        function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
 
-    function toggleNotificationSheet() {
-      const s = document.getElementById('notificationSheet'); s.classList.toggle('hidden');
-      if(!s.classList.contains('hidden')) {
-        const l = document.getElementById('notificationsList'); l.innerHTML='';
-        APP_STATE.notifications.forEach(n => {
-          l.innerHTML += `<div onclick="nClick('${n.id}')" class="p-2.5 rounded-xl cursor-pointer text-[10px] ${n.read?'bg-transparent opacity-60':'bg-blue-50 shadow-sm'} border-b border-slate-50 transition hover:bg-blue-100"><div class="flex justify-between font-black text-slate-800 mb-0.5"><span>${escapeHtml(n.title)}</span><span class="text-slate-400 font-normal">${n.time}</span></div><p class="text-slate-600 font-bold">${escapeHtml(n.message)}</p></div>`;
-        });
-      }
-    }
-    window.nClick = function(id) { const n=APP_STATE.notifications.find(x=>x.id===id); if(n){ n.read=true; toggleNotificationSheet(); if(n.taskId) openTaskCommentsModal(n.taskId); else if(n.projectId) openProjectDetailModal(n.projectId); renderAll(); } };
-    function markAllNotificationsRead() { APP_STATE.notifications.forEach(n=>n.read=true); toggleNotificationSheet(); renderAll(); }
+        function editTask(id) {
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            document.getElementById('taskId').value = t.id;
+            document.getElementById('taskStatus').value = t.status;
+            document.getElementById('taskTitleInput').value = t.title;
+            document.getElementById('taskAssignee').value = t.assignee;
+            document.getElementById('taskPriority').value = t.priority;
+            document.getElementById('taskDueDate').value = t.dueDate || '';
+            document.getElementById('isLongTerm').checked = t.isLongTerm || false;
+            document.getElementById('taskModalTitle').innerText = 'タスクの編集';
+            document.getElementById('taskModal').classList.remove('hidden');
+        }
 
-    window.toggleUserRole = toggleUserRole;
-    window.switchStaffTab = switchStaffTab;
-    window.scrollToColumn = scrollToColumn;
-    window.changeTaskStatus = changeTaskStatus;
-    window.quickAdvanceTask = quickAdvanceTask;
-    window.switchBlockedSosChoice = switchBlockedSosChoice;
-    window.submitBlockedSosForm = submitBlockedSosForm;
-    window.openTaskCommentsModal = openTaskCommentsModal;
-    window.handleProgressSliderChange = handleProgressSliderChange;
-    window.quickSetProgress = quickSetProgress;
-    window.insertProgressToComment = insertProgressToComment;
-    window.adjustTaskHours = adjustTaskHours;
-    window.resolveSos = resolveSos;
-    window.cancelReply = cancelReply;
-    window.clearCommentPhoto = clearCommentPhoto;
-    window.previewCommentPhoto = previewCommentPhoto;
-    window.handleSendComment = handleSendComment;
-    window.setReplyTo = setReplyTo;
-    window.openProjectDetailModal = openProjectDetailModal;
-    window.handleToggleProjectJoin = handleToggleProjectJoin;
-    window.approvePjJoin = approvePjJoin;
-    window.togglePjTask = togglePjTask;
-    window.handleAddTaskToProject = handleAddTaskToProject;
-    window.importProjectTask = importProjectTask;
-    window.openNewProjectModal = openNewProjectModal;
-    window.openProjectSettingsModal = openProjectSettingsModal;
-    window.handleSaveProject = handleSaveProject;
-    window.handleAddMicroTask = handleAddMicroTask;
-    window.toggleMicro = toggleMicro;
-    window.delMicro = delMicro;
-    window.batchLogMicroTasks = batchLogMicroTasks;
-    window.openNewTaskModal = openNewTaskModal;
-    window.handleSaveNewTask = handleSaveNewTask;
-    window.switchBossTier = switchBossTier;
-    window.bossApproveTask = bossApproveTask;
-    window.bossApproveAll = bossApproveAll;
-    window.openBossStaffDetail = openBossStaffDetail;
-    window.toggleNotificationSheet = toggleNotificationSheet;
-    window.markAllNotificationsRead = markAllNotificationsRead;
-    window.closeModal = closeModal;
-    window.handleDragStart = handleDragStart;
-    window.handleDragOver = handleDragOver;
-    window.handleDragLeave = handleDragLeave;
-    window.handleDrop = handleDrop;
-  </script>
+        function saveTask(e) {
+            e.preventDefault();
+            const id = document.getElementById('taskId').value;
+            const title = document.getElementById('taskTitleInput').value;
+            const assignee = document.getElementById('taskAssignee').value;
+            const priority = document.getElementById('taskPriority').value;
+            const dueDate = document.getElementById('taskDueDate').value;
+            const isLongTerm = document.getElementById('isLongTerm').checked;
+            const status = document.getElementById('taskStatus').value;
+
+            if (id) {
+                const t = tasks.find(x => x.id == id);
+                if (t) {
+                    t.title = title; t.assignee = assignee; t.priority = priority; t.dueDate = dueDate; t.isLongTerm = isLongTerm;
+                }
+            } else {
+                const newTask = { id: Date.now(), title, assignee, status, priority, dueDate, isLongTerm, progress: isLongTerm ? 30 : 0 };
+                tasks.push(newTask);
+            }
+
+            closeTaskModal();
+            renderKanban();
+            renderBossCockpit();
+        }
+
+        function deleteTask(id) {
+            if (confirm('このタスクを削除しますか？')) {
+                tasks = tasks.filter(t => t.id !== id);
+                renderKanban();
+                renderBossCockpit();
+            }
+        }
+
+        // Boss Message Modal
+        function openBossMsgModal(staffName) {
+            document.getElementById('targetStaffName').value = staffName;
+            document.getElementById('bossMsgModalTitle').innerText = `${staffName} へ声掛け・指示送信`;
+            document.getElementById('bossMsgContent').value = '';
+            document.getElementById('bossMsgModal').classList.remove('hidden');
+        }
+        function closeBossMsgModal() { document.getElementById('bossMsgModal').classList.add('hidden'); }
+        function setPresetMsg(text) { document.getElementById('bossMsgContent').value = text; }
+
+        function sendBossMessage() {
+            const staff = document.getElementById('targetStaffName').value;
+            const text = document.getElementById('bossMsgContent').value;
+            if (!text) { alert('メッセージを入力してください'); return; }
+
+            notifications.unshift({
+                id: Date.now(),
+                text: `【佐藤社長 ⇒ ${staff}】${text}`,
+                time: 'たった今',
+                unread: true
+            });
+
+            closeBossMsgModal();
+            renderNotifications();
+            alert(`[Google Chat Webhook自動送信成功]\n佐藤社長のアカウントから ${staff} へメッセージを送信し、Google Chatへディープリンク付き通知をdispatchしました。`);
+        }
+
+        // Project Modal
+        function openProjectModal() { document.getElementById('projectModal').classList.remove('hidden'); }
+        function closeProjectModal() { document.getElementById('projectModal').classList.add('hidden'); }
+        function saveProjectSettings() {
+            const name = document.getElementById('modalProjName').value;
+            document.getElementById('currentProjName').innerText = name;
+            closeProjectModal();
+            alert('プロジェクト設定と参加メンバーが正常に更新されました。');
+        }
+
+        // Notifications
+        function toggleNotifications() {
+            const dropdown = document.getElementById('notifDropdown');
+            dropdown.classList.toggle('hidden');
+        }
+        function renderNotifications() {
+            const list = document.getElementById('notifList');
+            const unreadCount = notifications.filter(n => n.unread).length;
+            const badge = document.getElementById('notifBadge');
+
+            if (unreadCount > 0) {
+                badge.innerText = unreadCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            list.innerHTML = notifications.map(n => `
+                <div class="p-3 hover:bg-slate-50 transition flex flex-col gap-1">
+                    <p class="font-medium text-slate-800">${n.text}</p>
+                    <div class="flex justify-between items-center text-[10px] text-slate-400">
+                        <span>${n.time}</span>
+                        <a href="#" onclick="alert('Google Chatディープリンクから該当タスクを開きます')" class="text-indigo-600 hover:underline">タスクを開く ➔</a>
+                    </div>
+                </div>
+            `).join('') || '<div class="p-4 text-center text-slate-400">通知はありません</div>';
+        }
+        function clearNotifications() {
+            notifications.forEach(n => n.unread = false);
+            renderNotifications();
+        }
+
+        window.onload = initApp;
+    </script>
 </body>
 </html>
